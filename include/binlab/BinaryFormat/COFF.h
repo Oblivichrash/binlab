@@ -344,6 +344,94 @@ enum SectionCharacteristics {
   IMAGE_SCN_MEM_WRITE                  = 0x80000000   // Section is writeable.
 };
 
+// Relocation format.
+struct IMAGE_RELOCATION {
+  union {
+    DWORD   VirtualAddress;
+    DWORD   RelocCount;             // Set to the real count when IMAGE_SCN_LNK_NRELOC_OVFL is set
+  };
+  DWORD   SymbolTableIndex;
+  WORD    Type;
+};
+
+// I386 relocation types.
+enum RelocationTypeI386 {
+  IMAGE_REL_I386_ABSOLUTE         = 0x0000,  // Reference is absolute, no relocation is necessary
+  IMAGE_REL_I386_DIR16            = 0x0001,  // Direct 16-bit reference to the symbols virtual address
+  IMAGE_REL_I386_REL16            = 0x0002,  // PC-relative 16-bit reference to the symbols virtual address
+  IMAGE_REL_I386_DIR32            = 0x0006,  // Direct 32-bit reference to the symbols virtual address
+  IMAGE_REL_I386_DIR32NB          = 0x0007,  // Direct 32-bit reference to the symbols virtual address, base not included
+  IMAGE_REL_I386_SEG12            = 0x0009,  // Direct 16-bit reference to the segment-selector bits of a 32-bit virtual address
+  IMAGE_REL_I386_SECTION          = 0x000A,
+  IMAGE_REL_I386_SECREL           = 0x000B,
+  IMAGE_REL_I386_TOKEN            = 0x000C,  // clr token
+  IMAGE_REL_I386_SECREL7          = 0x000D,  // 7 bit offset from base of section containing target
+  IMAGE_REL_I386_REL32            = 0x0014,  // PC-relative 32-bit reference to the symbols virtual address
+};
+
+// x64 relocations
+enum RelocationTypeAMD64 {
+  IMAGE_REL_AMD64_ABSOLUTE        = 0x0000,  // Reference is absolute, no relocation is necessary
+  IMAGE_REL_AMD64_ADDR64          = 0x0001,  // 64-bit address (VA).
+  IMAGE_REL_AMD64_ADDR32          = 0x0002,  // 32-bit address (VA).
+  IMAGE_REL_AMD64_ADDR32NB        = 0x0003,  // 32-bit address w/o image base (RVA).
+  IMAGE_REL_AMD64_REL32           = 0x0004,  // 32-bit relative address from byte following reloc
+  IMAGE_REL_AMD64_REL32_1         = 0x0005,  // 32-bit relative address from byte distance 1 from reloc
+  IMAGE_REL_AMD64_REL32_2         = 0x0006,  // 32-bit relative address from byte distance 2 from reloc
+  IMAGE_REL_AMD64_REL32_3         = 0x0007,  // 32-bit relative address from byte distance 3 from reloc
+  IMAGE_REL_AMD64_REL32_4         = 0x0008,  // 32-bit relative address from byte distance 4 from reloc
+  IMAGE_REL_AMD64_REL32_5         = 0x0009,  // 32-bit relative address from byte distance 5 from reloc
+  IMAGE_REL_AMD64_SECTION         = 0x000A,  // Section index
+  IMAGE_REL_AMD64_SECREL          = 0x000B,  // 32 bit offset from base of section containing target
+  IMAGE_REL_AMD64_SECREL7         = 0x000C,  // 7 bit unsigned offset from base of section containing target
+  IMAGE_REL_AMD64_TOKEN           = 0x000D,  // 32 bit metadata token
+  IMAGE_REL_AMD64_SREL32          = 0x000E,  // 32 bit signed span-dependent value emitted into object
+  IMAGE_REL_AMD64_PAIR            = 0x000F,
+  IMAGE_REL_AMD64_SSPAN32         = 0x0010,  // 32 bit signed span-dependent value applied at link time
+  IMAGE_REL_AMD64_EHANDLER        = 0x0011,
+  IMAGE_REL_AMD64_IMPORT_BR       = 0x0012,  // Indirect branch to an import
+  IMAGE_REL_AMD64_IMPORT_CALL     = 0x0013,  // Indirect call to an import
+  IMAGE_REL_AMD64_CFG_BR          = 0x0014,  // Indirect branch to a CFG check
+  IMAGE_REL_AMD64_CFG_BR_REX      = 0x0015,  // Indirect branch to a CFG check, with REX.W prefix
+  IMAGE_REL_AMD64_CFG_CALL        = 0x0016,  // Indirect call to a CFG check
+  IMAGE_REL_AMD64_INDIR_BR        = 0x0017,  // Indirect branch to a target in RAX (no CFG)
+  IMAGE_REL_AMD64_INDIR_BR_REX    = 0x0018,  // Indirect branch to a target in RAX, with REX.W prefix (no CFG)
+  IMAGE_REL_AMD64_INDIR_CALL      = 0x0019,  // Indirect call to a target in RAX (no CFG)
+  IMAGE_REL_AMD64_INDIR_BR_SWITCHTABLE_FIRST  = 0x0020, // Indirect branch for a switch table using Reg 0 (RAX)
+  IMAGE_REL_AMD64_INDIR_BR_SWITCHTABLE_LAST   = 0x002F // Indirect branch for a switch table using Reg 15 (R15)
+};
+
+// Line number format.
+struct IMAGE_LINENUMBER {
+  union {
+    DWORD   SymbolTableIndex;               // Symbol table index of function name if Linenumber is 0.
+    DWORD   VirtualAddress;                 // Virtual address of line number.
+  } Type;
+  WORD    Linenumber;                         // Line number.
+};
+
+// Based relocation format.
+struct IMAGE_BASE_RELOCATION {
+    DWORD   VirtualAddress;
+    DWORD   SizeOfBlock;
+//  WORD    TypeOffset[1];
+};
+
+// Based relocation types.
+enum BasedRelocationType {
+  IMAGE_REL_BASED_ABSOLUTE              = 0,
+  IMAGE_REL_BASED_HIGH                  = 1,
+  IMAGE_REL_BASED_LOW                   = 2,
+  IMAGE_REL_BASED_HIGHLOW               = 3,
+  IMAGE_REL_BASED_HIGHADJ               = 4,
+  IMAGE_REL_BASED_MACHINE_SPECIFIC_5    = 5,
+  IMAGE_REL_BASED_RESERVED              = 6,
+  IMAGE_REL_BASED_MACHINE_SPECIFIC_7    = 7,
+  IMAGE_REL_BASED_MACHINE_SPECIFIC_8    = 8,
+  IMAGE_REL_BASED_MACHINE_SPECIFIC_9    = 9,
+  IMAGE_REL_BASED_DIR64                 = 10
+};
+
 }  // namespace COFF
 }  // namespace binlab
 
