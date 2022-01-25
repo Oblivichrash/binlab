@@ -9,12 +9,15 @@
 namespace binlab {
 namespace COFF {
 
+using CHAR        = std::int8_t;
 using BYTE        = std::uint8_t;
 using WORD        = std::uint16_t;
 using LONG        = std::int32_t;
 using DWORD       = std::uint32_t;
 using ULONGLONG   = std::uint64_t;
 using ULONG_PTR   = std::uint64_t;
+using VOID        = void;
+using PVOID       = void*;
 
 static constexpr std::uint16_t IMAGE_DOS_SIGNATURE  = 0x5A4D;       // MZ
 static constexpr std::uint32_t IMAGE_NT_SIGNATURE   = 0x00004550;   // PE00
@@ -430,6 +433,140 @@ enum BasedRelocationType {
   IMAGE_REL_BASED_MACHINE_SPECIFIC_8    = 8,
   IMAGE_REL_BASED_MACHINE_SPECIFIC_9    = 9,
   IMAGE_REL_BASED_DIR64                 = 10
+};
+
+// Export Format
+struct IMAGE_EXPORT_DIRECTORY {
+  DWORD   Characteristics;
+  DWORD   TimeDateStamp;
+  WORD    MajorVersion;
+  WORD    MinorVersion;
+  DWORD   Name;
+  DWORD   Base;
+  DWORD   NumberOfFunctions;
+  DWORD   NumberOfNames;
+  DWORD   AddressOfFunctions;     // RVA from base of image
+  DWORD   AddressOfNames;         // RVA from base of image
+  DWORD   AddressOfNameOrdinals;  // RVA from base of image
+};
+
+// Import Format
+struct IMAGE_IMPORT_BY_NAME {
+  WORD    Hint;
+  CHAR    Name[1];
+};
+
+struct IMAGE_THUNK_DATA64 {
+  union {
+    ULONGLONG ForwarderString;  // PBYTE 
+    ULONGLONG Function;         // PDWORD
+    ULONGLONG Ordinal;
+    ULONGLONG AddressOfData;    // PIMAGE_IMPORT_BY_NAME
+  } u1;
+};
+
+struct IMAGE_THUNK_DATA32 {
+  union {
+    DWORD ForwarderString;      // PBYTE 
+    DWORD Function;             // PDWORD
+    DWORD Ordinal;
+    DWORD AddressOfData;        // PIMAGE_IMPORT_BY_NAME
+  } u1;
+};
+
+#define IMAGE_ORDINAL_FLAG64 0x8000000000000000
+#define IMAGE_ORDINAL_FLAG32 0x80000000
+#define IMAGE_ORDINAL64(Ordinal) (Ordinal & 0xffff)
+#define IMAGE_ORDINAL32(Ordinal) (Ordinal & 0xffff)
+#define IMAGE_SNAP_BY_ORDINAL64(Ordinal) ((Ordinal & IMAGE_ORDINAL_FLAG64) != 0)
+#define IMAGE_SNAP_BY_ORDINAL32(Ordinal) ((Ordinal & IMAGE_ORDINAL_FLAG32) != 0)
+
+// Thread Local Storage
+#if (_MSC_VER >= 800) || defined(_STDCALL_SUPPORTED)
+#define NTAPI __stdcall
+#else
+#define NTAPI
+#endif
+typedef VOID (NTAPI *PIMAGE_TLS_CALLBACK) (PVOID DllHandle, DWORD Reason, PVOID Reserved);
+
+struct IMAGE_TLS_DIRECTORY64 {
+  ULONGLONG StartAddressOfRawData;
+  ULONGLONG EndAddressOfRawData;
+  ULONGLONG AddressOfIndex;         // PDWORD
+  ULONGLONG AddressOfCallBacks;     // PIMAGE_TLS_CALLBACK *;
+  DWORD SizeOfZeroFill;
+  union {
+    DWORD Characteristics;
+    struct {
+       DWORD Reserved0 : 20;
+       DWORD Alignment : 4;
+       DWORD Reserved1 : 8;
+    };
+  };
+};
+
+struct IMAGE_TLS_DIRECTORY32 {
+  DWORD   StartAddressOfRawData;
+  DWORD   EndAddressOfRawData;
+  DWORD   AddressOfIndex;             // PDWORD
+  DWORD   AddressOfCallBacks;         // PIMAGE_TLS_CALLBACK *
+  DWORD   SizeOfZeroFill;
+  union {
+    DWORD Characteristics;
+    struct {
+      DWORD Reserved0 : 20;
+      DWORD Alignment : 4;
+      DWORD Reserved1 : 8;
+    };
+  };
+};
+
+struct IMAGE_IMPORT_DESCRIPTOR {
+  union {
+    DWORD   Characteristics;            // 0 for terminating null import descriptor
+    DWORD   OriginalFirstThunk;         // RVA to original unbound IAT (PIMAGE_THUNK_DATA)
+  };
+  DWORD   TimeDateStamp;                  // 0 if not bound,
+                                          // -1 if bound, and real date\time stamp
+                                          //     in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND)
+                                          // O.W. date/time stamp of DLL bound to (Old BIND)
+
+  DWORD   ForwarderChain;                 // -1 if no forwarders
+  DWORD   Name;
+  DWORD   FirstThunk;                     // RVA to IAT (if bound this IAT has actual addresses)
+};
+
+// New format import descriptors pointed to by DataDirectory[ IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT ]
+struct IMAGE_BOUND_IMPORT_DESCRIPTOR {
+  DWORD   TimeDateStamp;
+  WORD    OffsetModuleName;
+  WORD    NumberOfModuleForwarderRefs;
+// Array of zero or more IMAGE_BOUND_FORWARDER_REF follows
+};
+
+struct IMAGE_BOUND_FORWARDER_REF {
+  DWORD   TimeDateStamp;
+  WORD    OffsetModuleName;
+  WORD    Reserved;
+};
+
+struct IMAGE_DELAYLOAD_DESCRIPTOR {
+  union {
+    DWORD AllAttributes;
+    struct {
+      DWORD RvaBased : 1;                 // Delay load version 2
+      DWORD ReservedAttributes : 31;
+    };
+  } Attributes;
+
+  DWORD DllNameRVA;                       // RVA to the name of the target library (NULL-terminate ASCII string)
+  DWORD ModuleHandleRVA;                  // RVA to the HMODULE caching location (PHMODULE)
+  DWORD ImportAddressTableRVA;            // RVA to the start of the IAT (PIMAGE_THUNK_DATA)
+  DWORD ImportNameTableRVA;               // RVA to the start of the name table (PIMAGE_THUNK_DATA::AddressOfData)
+  DWORD BoundImportAddressTableRVA;       // RVA to an optional bound IAT
+  DWORD UnloadInformationTableRVA;        // RVA to an optional unload info table
+  DWORD TimeDateStamp;                    // 0 if not bound,
+                                          // Otherwise, date/time of the target DLL
 };
 
 }  // namespace COFF
