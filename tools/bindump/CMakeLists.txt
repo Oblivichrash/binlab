@@ -2,6 +2,7 @@
 
 add_executable(bindump
   main.cpp
+  pedump.cpp
 )
 
 target_include_directories(bindump
