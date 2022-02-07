@@ -9,3 +9,5 @@ target_include_directories(bindump
   PRIVATE "${PROJECT_SOURCE_DIR}/include"
   PRIVATE "${PROJECT_BINARY_DIR}"
 )
+
+install(TARGETS "bindump")

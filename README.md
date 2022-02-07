@@ -25,6 +25,7 @@ cmake --build build [options]
 ### Software Installation
 
 ```
-cmake --build build --target install
+cmake --install build [options]
 ```
 
+- `--prefix <directory>` Override `CMAKE_INSTALL_PREFIX`

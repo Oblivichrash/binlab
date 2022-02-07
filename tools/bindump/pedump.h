@@ -48,10 +48,19 @@ class Accessor {
 namespace PE {
 
 void Dump(std::istream& is);
-void Dump(const Accessor& base, const COFF::IMAGE_EXPORT_DIRECTORY* directory);
+void Dump(const std::vector<char>& buff, const COFF::IMAGE_NT_HEADERS32& nt, const Accessor& rva);
+void Dump(const std::vector<char>& buff, const COFF::IMAGE_NT_HEADERS64& nt, const Accessor& rva);
+
+void Dump32(const Accessor& base, const COFF::IMAGE_EXPORT_DIRECTORY* directory);
+void Dump32(const Accessor& base, const COFF::IMAGE_IMPORT_DESCRIPTOR* descriptor);
+void Dump32(const Accessor& base, const COFF::IMAGE_BASE_RELOCATION* relocation);
+
+void Dump64(const Accessor& base, const COFF::IMAGE_EXPORT_DIRECTORY* directory);
+void Dump64(const Accessor& base, const COFF::IMAGE_IMPORT_DESCRIPTOR* descriptor);
+void Dump64(const Accessor& base, const COFF::IMAGE_BASE_RELOCATION* relocation);
+
+void Dump(const Accessor& base, const COFF::IMAGE_THUNK_DATA32* thunk);
 void Dump(const Accessor& base, const COFF::IMAGE_THUNK_DATA64* thunk);
-void Dump(const Accessor& base, const COFF::IMAGE_IMPORT_DESCRIPTOR* descriptor);
-void Dump(const Accessor& base, const COFF::IMAGE_BASE_RELOCATION* relocation);
 
 }  // namespace PE
 
