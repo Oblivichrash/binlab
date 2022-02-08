@@ -15,16 +15,20 @@ int main(int argc, char* argv[]) try {
     return 1;
   }
 
-  if (std::ifstream is{argv[1], std::ios::binary}) {
-    switch (is.peek()) {
-      case 'M':
-        PE::Dump(is);
-        break;
-      case 0x7f:
-        //ELF::Dump(is);
-        break;
-      default:
-        break;
+  if (std::ifstream is{argv[1], std::ios::binary | std::ios::ate}) {
+    const auto& size = is.tellg();
+    std::vector<char> buff(size);
+    if (is.seekg(0, std::ios::beg).read(&buff[0], size)) {
+      switch (buff[0]) {
+        case 'M':
+          PE::Dump(buff);
+          break;
+        case 0x7f:
+          // ELF::Dump(buff);
+          break;
+        default:
+          break;
+      }
     }
   }
 

@@ -47,9 +47,9 @@ class Accessor {
 
 namespace PE {
 
-void Dump(std::istream& is);
-void Dump(const std::vector<char>& buff, const COFF::IMAGE_NT_HEADERS32& nt, const Accessor& rva);
-void Dump(const std::vector<char>& buff, const COFF::IMAGE_NT_HEADERS64& nt, const Accessor& rva);
+void Dump(std::vector<char>& buff);
+void Dump(const Accessor& base, const COFF::IMAGE_NT_HEADERS32& nt);
+void Dump(const Accessor& base, const COFF::IMAGE_NT_HEADERS64& nt);
 
 void Dump32(const Accessor& base, const COFF::IMAGE_EXPORT_DIRECTORY* directory);
 void Dump32(const Accessor& base, const COFF::IMAGE_IMPORT_DESCRIPTOR* descriptor);

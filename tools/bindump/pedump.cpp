@@ -25,75 +25,70 @@ std::ostream& operator<<(std::ostream& os, const IMAGE_IMPORT_DESCRIPTOR& descri
   return os;
 }
 
-void PE::Dump(std::istream& is) {
-  if (auto size = is.seekg(0, std::ios::end).tellg()) {
-    std::vector<char> buff(size);
-    if (is.seekg(0, std::ios::beg).read(&buff[0], size)) {
-      auto& dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
-      if (dos.e_magic == IMAGE_DOS_SIGNATURE) {
-        auto& nt = reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos.e_lfanew]);
-        if (nt.Signature == IMAGE_NT_SIGNATURE) {
-          Accessor rva{&buff[0], IMAGE_FIRST_SECTION(&nt), nt.FileHeader.NumberOfSections};
-          switch (nt.OptionalHeader.Magic) {
-            case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
-              Dump(buff, nt, rva);
-              break;
-            case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
-              Dump(buff, reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos.e_lfanew]), rva);
-              break;
-            default:
-              std::cerr << "invalid optional magic\n";
-              break;
-          }
-        }
+void PE::Dump(std::vector<char>& buff) {
+  auto& dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
+  if (dos.e_magic == IMAGE_DOS_SIGNATURE) {
+    auto& nt = reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos.e_lfanew]);
+    if (nt.Signature == IMAGE_NT_SIGNATURE) {
+      Accessor base{&buff[0], IMAGE_FIRST_SECTION(&nt), nt.FileHeader.NumberOfSections};
+      switch (nt.OptionalHeader.Magic) {
+        case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+          Dump(base, nt);
+          break;
+        case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+          Dump(base, reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos.e_lfanew]));
+          break;
+        default:
+          std::cerr << "invalid optional magic\n";
+          break;
       }
     }
   }
 }
 
-void PE::Dump(const std::vector<char>& buff, const IMAGE_NT_HEADERS32& nt, const Accessor& rva) {
+void PE::Dump(const Accessor& base, const IMAGE_NT_HEADERS32& nt) {
   const IMAGE_DATA_DIRECTORY* directory;
   
   std::cout << std::hex;
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump export directory\n";
-    Dump32(rva, reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&rva[directory->VirtualAddress]));
+    Dump32(base, reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&base[directory->VirtualAddress]));
   }
 
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump import descriptor\n";
-    Dump32(rva, reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&rva[directory->VirtualAddress]));
+    Dump32(base, reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&base[directory->VirtualAddress]));
   }
 
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump base relocation\n";
-    Dump32(rva, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&rva[directory->VirtualAddress]));
+    Dump32(base, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
   }
 }
 
-void PE::Dump(const std::vector<char>& buff, const IMAGE_NT_HEADERS64& nt, const Accessor& rva) {
+void PE::Dump(const Accessor& base, const IMAGE_NT_HEADERS64& nt) {
   const IMAGE_DATA_DIRECTORY* directory;
   
   std::cout << std::hex;
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump export directory\n";
-    Dump64(rva, reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&rva[directory->VirtualAddress]));
+    Dump64(base, reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&base[directory->VirtualAddress]));
   }
 
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump import descriptor\n";
-    Dump64(rva, reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&rva[directory->VirtualAddress]));
+    Dump64(base, reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&base[directory->VirtualAddress]));
   }
 
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump base relocation\n";
-    Dump64(rva, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&rva[directory->VirtualAddress]));
+    Dump64(base, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
   }
 }
 
