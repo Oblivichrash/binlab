@@ -57,7 +57,7 @@ struct IMAGE_FILE_HEADER {
 
 static constexpr std::size_t IMAGE_SIZEOF_FILE_HEADER = 20;
 
-enum Characteristics {
+enum {
   IMAGE_FILE_RELOCS_STRIPPED           = 0x0001,  // Relocation info stripped from file.
   IMAGE_FILE_EXECUTABLE_IMAGE          = 0x0002,  // File is executable  (i.e. no unresolved external references).
   IMAGE_FILE_LINE_NUMS_STRIPPED        = 0x0004,  // Line nunbers stripped from file.
@@ -75,7 +75,7 @@ enum Characteristics {
   IMAGE_FILE_BYTES_REVERSED_HI         = 0x8000   // Bytes of machine word are reversed.
 };
 
-enum MachineTypes {
+enum {
   IMAGE_FILE_MACHINE_UNKNOWN           = 0,
   IMAGE_FILE_MACHINE_TARGET_HOST       = 0x0001,  // Useful for indicating we want to interact with the host and not a WoW guest.
   IMAGE_FILE_MACHINE_I386              = 0x014c,  // Intel 386.
@@ -213,7 +213,7 @@ struct IMAGE_NT_HEADERS32 {
 static_assert(offsetof(IMAGE_NT_HEADERS32, OptionalHeader) == offsetof(IMAGE_NT_HEADERS64, OptionalHeader), "");
 
 // Subsystem Values
-enum WindowsSubsystem {
+enum {
   IMAGE_SUBSYSTEM_UNKNOWN                 = 0,   // Unknown subsystem.
   IMAGE_SUBSYSTEM_NATIVE                  = 1,   // Image doesn't require a subsystem.
   IMAGE_SUBSYSTEM_WINDOWS_GUI             = 2,   // Image runs in the Windows GUI subsystem.
@@ -232,7 +232,7 @@ enum WindowsSubsystem {
 };
 
 // DllCharacteristics Entries
-enum DLLCharacteristics {
+enum {
 //IMAGE_LIBRARY_PROCESS_INIT                  = 0x0001,     // Reserved.
 //IMAGE_LIBRARY_PROCESS_TERM                  = 0x0002,     // Reserved.
 //IMAGE_LIBRARY_THREAD_INIT                   = 0x0004,     // Reserved.
@@ -251,7 +251,7 @@ enum DLLCharacteristics {
 };
 
 // Directory Entries
-enum DirectoryEntries {
+enum {
   IMAGE_DIRECTORY_ENTRY_EXPORT          = 0,    // Export Directory
   IMAGE_DIRECTORY_ENTRY_IMPORT          = 1,    // Import Directory
   IMAGE_DIRECTORY_ENTRY_RESOURCE        = 2,    // Resource Directory
@@ -292,7 +292,7 @@ struct IMAGE_SECTION_HEADER {
 static constexpr std::size_t IMAGE_SIZEOF_SECTION_HEADER = 40;
 
 // Section characteristics.
-enum SectionCharacteristics {
+enum {
 //IMAGE_SCN_TYPE_REG                   = 0x00000000,  // Reserved.
 //IMAGE_SCN_TYPE_DSECT                 = 0x00000001,  // Reserved.
 //IMAGE_SCN_TYPE_NOLOAD                = 0x00000002,  // Reserved.
@@ -358,7 +358,7 @@ struct IMAGE_RELOCATION {
 };
 
 // I386 relocation types.
-enum RelocationTypeI386 {
+enum {
   IMAGE_REL_I386_ABSOLUTE         = 0x0000,  // Reference is absolute, no relocation is necessary
   IMAGE_REL_I386_DIR16            = 0x0001,  // Direct 16-bit reference to the symbols virtual address
   IMAGE_REL_I386_REL16            = 0x0002,  // PC-relative 16-bit reference to the symbols virtual address
@@ -373,7 +373,7 @@ enum RelocationTypeI386 {
 };
 
 // x64 relocations
-enum RelocationTypeAMD64 {
+enum {
   IMAGE_REL_AMD64_ABSOLUTE        = 0x0000,  // Reference is absolute, no relocation is necessary
   IMAGE_REL_AMD64_ADDR64          = 0x0001,  // 64-bit address (VA).
   IMAGE_REL_AMD64_ADDR32          = 0x0002,  // 32-bit address (VA).
@@ -421,7 +421,7 @@ struct IMAGE_BASE_RELOCATION {
 };
 
 // Based relocation types.
-enum BasedRelocationType {
+enum {
   IMAGE_REL_BASED_ABSOLUTE              = 0,
   IMAGE_REL_BASED_HIGH                  = 1,
   IMAGE_REL_BASED_LOW                   = 2,

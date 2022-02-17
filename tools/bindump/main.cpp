@@ -5,6 +5,7 @@
 
 #include "binlab/Config/Config.h"
 #include "pedump.h"
+#include "elfdump.h"
 
 using namespace binlab;
 
@@ -23,8 +24,8 @@ int main(int argc, char* argv[]) try {
         case 'M':
           PE::Dump(buff);
           break;
-        case 0x7f:
-          // ELF::Dump(buff);
+        case 0x7f:  // ELFMAG0
+          ELF::Dump(buff);
           break;
         default:
           break;

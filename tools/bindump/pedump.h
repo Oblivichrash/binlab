@@ -12,6 +12,7 @@
 #include "binlab/BinaryFormat/COFF.h"
 
 namespace binlab {
+namespace PE {
 
 class Accessor {
  public:
@@ -45,8 +46,6 @@ class Accessor {
   const Section* last_;
 };
 
-namespace PE {
-
 void Dump(std::vector<char>& buff);
 void Dump(const Accessor& base, const COFF::IMAGE_NT_HEADERS32& nt);
 void Dump(const Accessor& base, const COFF::IMAGE_NT_HEADERS64& nt);
@@ -63,7 +62,6 @@ void Dump(const Accessor& base, const COFF::IMAGE_THUNK_DATA32* thunk);
 void Dump(const Accessor& base, const COFF::IMAGE_THUNK_DATA64* thunk);
 
 }  // namespace PE
-
 }  // namespace binlab
 
 #endif  // !BINLAB_BINDUMP_PEDUMP_H_
