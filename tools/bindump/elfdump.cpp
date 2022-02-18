@@ -8,15 +8,24 @@ using namespace binlab::ELF;
 void ELF::Dump(std::vector<char>& buff) {
   auto& ehdr = reinterpret_cast<Elf64_Ehdr&>(buff[0]);
   if (!std::memcmp(&buff[0], ELFMAG, SELFMAG)) {
-    switch (ehdr.e_ident[EI_CLASS]) {
-      case ELFCLASS32:
-        break;
-      case ELFCLASS64:
+    if (ehdr.e_ident[EI_CLASS] == ELFCLASS32) {
+      if (ehdr.e_ident[EI_DATA] == ELFDATA2LSB) {
+        //Dump32LE(buff);
+      } else if (ehdr.e_ident[EI_DATA] == ELFDATA2MSB) {
+        std::cerr << "big endian\n";
+      } else {
+        std::cerr << "invalid ELF data endian\n";
+      }
+    } else if (ehdr.e_ident[EI_CLASS] == ELFCLASS64) {
+      if (ehdr.e_ident[EI_DATA] == ELFDATA2LSB) {
         Dump64LE(buff);
-        break;
-      default:
-        std::cerr << "invalid ELF class\n";
-        break;
+      } else if (ehdr.e_ident[EI_DATA] == ELFDATA2MSB) {
+        std::cerr << "big endian\n";
+      } else {
+        std::cerr << "invalid ELF data endian\n";
+      }
+    } else {
+      std::cerr << "invalid ELF class\n";
     }
   }
 }
@@ -47,67 +56,107 @@ std::uint32_t gnu_hash(const std::uint8_t* name) {
   return h;
 }
 
-struct gnu_hash_table_header {
-  std::uint32_t nbuckets;
-  std::uint32_t symoffset;
-  std::uint32_t bloom_size;
-  std::uint32_t bloom_shift;
-};
+// Reference: https://flapenguin.me/elf-dt-gnu-hash
+template <typename bloom_el_t>
+const Elf64_Sym* GNULookup(const char* strtab, const Elf64_Sym* symtab, const std :: uint32_t* hashtab, const char* name ) {
+  constexpr auto ELFCLASS_BITS = sizeof(bloom_el_t) * 8;
 
-void Dump(const Accessor& base, const gnu_hash_table_header* hash) {
-  auto bloom = reinterpret_cast<const std::uint64_t*>(hash + 1);  // for 64 bits
-  auto buckets = reinterpret_cast<const std::uint32_t*>(&bloom[hash->bloom_size]);
-  auto chain = reinterpret_cast<const std::uint32_t*>(&buckets[hash->nbuckets]);
+  const std::uint32_t namehash = gnu_hash(reinterpret_cast<const std::uint8_t*>(name));
 
-  const char name[] = "func1";
-  auto namehash = gnu_hash(reinterpret_cast<const std::uint8_t*>(name));
+  auto nbuckets = hashtab[0];
+  auto symoffset = hashtab[1];
+  auto bloom_size = hashtab[2];
+  auto bloom_shift = hashtab[3];
+  auto bloom = reinterpret_cast<const bloom_el_t*>(&hashtab[4]);
+  auto buckets = reinterpret_cast<const std::uint32_t*>(&bloom[bloom_size]);
+  auto chain = &buckets[nbuckets];
 
-  constexpr auto ELFCLASS_BITS = sizeof(bloom[0]) * 8;
-
-  auto word = bloom[(namehash / ELFCLASS_BITS) % hash->bloom_size];
-  auto mask = std::decay_t<decltype(bloom[0])>{};
-
-  mask |= static_cast<decltype(mask)>(1) << (namehash % ELFCLASS_BITS);
-  mask |= static_cast<decltype(mask)>(1) << ((namehash >> hash->bloom_shift) % ELFCLASS_BITS);
+  bloom_el_t word = bloom[(namehash / ELFCLASS_BITS) % bloom_size];
+  bloom_el_t mask = 0;
+  mask |= static_cast<bloom_el_t>(1) << (namehash % ELFCLASS_BITS);
+  mask |= static_cast<bloom_el_t>(1) << ((namehash >> bloom_shift) % ELFCLASS_BITS);
 
   if ((word & mask) != mask) {
     std::cerr << "at least one bit is not set, symbol is surely missing\n";
-    return;
+    return nullptr;
   }
 
-  auto symix = buckets[namehash % hash->nbuckets];
-  if (symix < hash->symoffset) {
+  auto symix = buckets[namehash % nbuckets];
+  if (symix < symoffset) {
     std::cerr << "invalid symbol index\n";
-    return;
+    return nullptr;
   }
 
-  //while (true) {
-  //  const char* symname = strtab + symtab[symix].st_name;
-  //  const uint32_t hash = chain[symix - symoffset];
+  for (std::uint32_t hash;; ++symix) {
+    hash = chain[symix - symoffset];
 
-  //  if ((namehash | 1) == (hash | 1) && strcmp(name, symname) == 0) {
-  //    return &symtab[symix];
-  //  }
+    if ((namehash | 1) == (hash | 1)) {
+      if (!std::strcmp(name, &strtab[symtab[symix].st_name])) {
+        return &symtab[symix];
+      }
+    }
 
-  //  /* Chain ends with an element with the lowest bit set to 1. */
-  //  if (hash & 1) {
-  //    break;
-  //  }
+    // Chain ends with an element with the lowest bit set to 1.
+    if (hash & 1) {
+      break;
+    }
+  }
 
-  //  symix++;
-  //}
+  return nullptr;
 }
 
 void ELF::Dump(const Accessor& base, const ELF::Elf64_Dyn* dyns) {
-  const gnu_hash_table_header* hash;
+  const char* strtab{};
+  std::size_t strsz;
+
+  const Elf64_Sym* symtab{};
+  std::size_t syment;
+
+  const std::uint32_t* gnu_hash{};
 
   for (auto dyn = dyns; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
+      case DT_STRTAB:
+        strtab = reinterpret_cast<const char*>(&base[dyn->d_un.d_ptr]);
+        break;
+      case DT_SYMTAB:
+        symtab = reinterpret_cast<const Elf64_Sym*>(&base[dyn->d_un.d_ptr]);
+        break;
+      case DT_STRSZ:
+        strsz = dyn->d_un.d_val;
+        break;
+      case DT_SYMENT:
+        syment = dyn->d_un.d_val;
+        break;
       case DT_GNU_HASH:
-        hash = reinterpret_cast<const gnu_hash_table_header*>(&base[dyn->d_un.d_ptr]);
+        gnu_hash = reinterpret_cast<const std::uint32_t*>(&base[dyn->d_un.d_ptr]);
         break;
       default:
         break;
     }
   }
+
+  if (strtab == nullptr || symtab == nullptr || gnu_hash == nullptr) {
+    std::cerr << "missing needed symbol info\n";
+    return;
+  }
+
+  std::string name;
+  std::cout << "please input symbol name: ";
+  std::cin >> name;
+
+  auto sym = GNULookup<std::uint64_t>(strtab, symtab, gnu_hash, name.c_str());
+  std::cout << std::hex;
+  if (sym != nullptr) {
+    std::cout << std::setw(16) << "name: " << &strtab[sym->st_name] << '\n';
+    std::cout << std::setw(16) << "bind: " << std::showbase << ELF64_ST_BIND(sym->st_info) << '\n';
+    std::cout << std::setw(16) << "type: " << std::showbase << ELF64_ST_TYPE(sym->st_info) << '\n';
+    std::cout << std::setw(16) << "visibility: " << std::showbase << ELF64_ST_VISIBILITY(sym->st_other) << '\n';
+    std::cout << std::setw(16) << "shndx: " << std::showbase << sym->st_shndx << '\n';
+    std::cout << std::setw(16) << "value: " << std::showbase << sym->st_value << '\n';
+    std::cout << std::setw(16) << "size: " << std::showbase << sym->st_size << '\n';
+  } else {
+    std::cerr << "couldn't find symbol: " << name << '\n';
+  }
+  std::cout << std::dec;
 }

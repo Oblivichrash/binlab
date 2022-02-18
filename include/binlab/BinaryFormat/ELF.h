@@ -13,6 +13,7 @@ using Elf32_Off = std::uint32_t;  // File offset
 using Elf32_Half = std::uint16_t;
 using Elf32_Word = std::uint32_t;
 using Elf32_Sword = std::int32_t;
+using Elf32_Section = std::uint16_t;
 
 using Elf64_Addr = std::uint64_t;
 using Elf64_Off = std::uint64_t;
@@ -21,6 +22,7 @@ using Elf64_Word = std::uint32_t;
 using Elf64_Sword = std::int32_t;
 using Elf64_Xword = std::uint64_t;
 using Elf64_Sxword = std::int64_t;
+using Elf64_Section = std::uint16_t;
 
 // The ELF file header.  This appears at the start of every ELF file.
 static constexpr std::size_t EI_NIDENT = 16;
@@ -119,7 +121,7 @@ enum {
   ELFOSABI_CLOUDABI = 17,     // Nuxi CloudABI
   ELFOSABI_ARM_AEABI = 64,    // ARM EABI
   ELFOSABI_ARM = 97,          // ARM
-  ELFOSABI_STANDALONE = 255,  // Standalone (embedded) application
+  ELFOSABI_STANDALONE = 255   // Standalone (embedded) application
 };
 
 static constexpr std::size_t EI_ABIVERSION = 8; // ABI version
@@ -350,6 +352,111 @@ enum {
 };
 static constexpr std::size_t EV_NUM = 2;
 
+// Symbol table entry.
+struct Elf32_Sym {
+  Elf32_Word    st_name;    // Symbol name (string tbl index)
+  Elf32_Addr    st_value;   // Symbol value
+  Elf32_Word    st_size;    // Symbol size
+  unsigned char st_info;    // Symbol type and binding
+  unsigned char st_other;   // Symbol visibility
+  Elf32_Section st_shndx;   // Section index
+};
+
+struct Elf64_Sym {
+  Elf64_Word    st_name;    // Symbol name (string tbl index)
+  unsigned char st_info;    // Symbol type and binding
+  unsigned char st_other;   // Symbol visibility
+  Elf64_Section st_shndx;   // Section index
+  Elf64_Addr    st_value;   // Symbol value
+  Elf64_Xword   st_size;    // Symbol size
+};
+
+// The syminfo section if available contains additional information about every dynamic symbol.
+struct Elf32_Syminfo {
+  Elf32_Half si_boundto;  // Direct bindings, symbol bound to
+  Elf32_Half si_flags;    // Per symbol flags
+};
+
+struct Elf64_Syminfo {
+  Elf64_Half si_boundto;  // Direct bindings, symbol bound to
+  Elf64_Half si_flags;    // Per symbol flags
+};
+
+// Possible values for si_boundto.
+enum {
+  SYMINFO_BT_SELF = 0xffff,        // Symbol bound to self
+  SYMINFO_BT_PARENT = 0xfffe,      // Symbol bound to parent
+  SYMINFO_BT_LOWRESERVE = 0xff00   // Beginning of reserved entries
+};
+
+// Possible bitmasks for si_flags.
+enum {
+  SYMINFO_FLG_DIRECT = 0x0001,    // Direct bound symbol
+  SYMINFO_FLG_PASSTHRU = 0x0002,  // Pass-thru symbol for translator
+  SYMINFO_FLG_COPY = 0x0004,      // Symbol is a copy-reloc
+  SYMINFO_FLG_LAZYLOAD = 0x0008   // Symbol bound to object to be lazy loaded
+};
+// Syminfo version values.
+enum { SYMINFO_NONE = 0, SYMINFO_CURRENT = 1, SYMINFO_NUM = 2 };
+
+// How to extract and insert information held in the st_info field.
+#define ELF32_ST_BIND(val)		(((unsigned char) (val)) >> 4)
+#define ELF32_ST_TYPE(val)		((val) & 0xf)
+#define ELF32_ST_INFO(bind, type)	(((bind) << 4) + ((type) & 0xf))
+
+// Both Elf32_Sym and Elf64_Sym use the same one-byte st_info field.
+#define ELF64_ST_BIND(val)		ELF32_ST_BIND (val)
+#define ELF64_ST_TYPE(val)		ELF32_ST_TYPE (val)
+#define ELF64_ST_INFO(bind, type)	ELF32_ST_INFO ((bind), (type))
+
+// Legal values for ST_BIND subfield of st_info (symbol binding).
+enum {
+  STB_LOCAL = 0,        // Local symbol
+  STB_GLOBAL = 1,       // Global symbol
+  STB_WEAK = 2,         // Weak symbol
+  STB_NUM = 3,          // Number of defined types.
+  STB_LOOS = 10,        // Start of OS-specific
+  STB_GNU_UNIQUE = 10,  // Unique symbol.
+  STB_HIOS = 12,        // End of OS-specific
+  STB_LOPROC = 13,      // Start of processor-specific
+  STB_HIPROC = 15       // End of processor-specific
+};
+
+// Legal values for ST_TYPE subfield of st_info (symbol type).
+enum {
+  STT_NOTYPE = 0,      // Symbol type is unspecified
+  STT_OBJECT = 1,      // Symbol is a data object
+  STT_FUNC = 2,        // Symbol is a code object
+  STT_SECTION = 3,     // Symbol associated with a section
+  STT_FILE = 4,        // Symbol's name is file name
+  STT_COMMON = 5,      // Symbol is a common data object
+  STT_TLS = 6,         // Symbol is thread-local data object
+  STT_NUM = 7,         // Number of defined types.
+  STT_LOOS = 10,       // Start of OS-specific
+  STT_GNU_IFUNC = 10,  // Symbol is indirect code object
+  STT_HIOS = 12,       // End of OS-specific
+  STT_LOPROC = 13,     // Start of processor-specific
+  STT_HIPROC = 15      // End of processor-specific
+};
+
+// Symbol table indices are found in the hash buckets and chain table of a symbol hash table section.
+// This special index value indicates the end of a chain, meaning no further symbols are found in that bucket.
+static constexpr std::uint32_t STN_UNDEF = 0; // End of a chain.
+
+// How to extract and insert information held in the st_other field.
+#define ELF32_ST_VISIBILITY(o)	((o) & 0x03)
+
+// For ELF64 the definitions are the same.
+#define ELF64_ST_VISIBILITY(o)	ELF32_ST_VISIBILITY (o)
+
+// Symbol visibility specification encoded in the st_other field.
+enum {
+  STV_DEFAULT = 0,    // Default symbol visibility rules
+  STV_INTERNAL = 1,   // Processor specific hidden class
+  STV_HIDDEN = 2,     // Sym unavailable in other modules
+  STV_PROTECTED = 3   // Not preemptible, not exported
+};
+
 // Program segment header.
 struct Elf32_Phdr {
   Elf32_Word  p_type;     // Segment type
@@ -479,7 +586,7 @@ enum {
   NT_VMCOREDD = 0x700,          // Vmcore Device Dump Note.
   NT_MIPS_DSP = 0x800,          // MIPS DSP ASE registers.
   NT_MIPS_FP_MODE = 0x801,      // MIPS floating-point mode.
-  NT_MIPS_MSA = 0x802,          // MIPS SIMD registers.
+  NT_MIPS_MSA = 0x802           // MIPS SIMD registers.
 };
 
 // Legal values for the note segment descriptor types for object files.
@@ -543,64 +650,71 @@ enum {
   DT_LOOS = 0x6000000d,     // Start of OS-specific
   DT_HIOS = 0x6ffff000,     // End of OS-specific
   DT_LOPROC = 0x70000000,   // Start of processor-specific
-  DT_HIPROC = 0x7fffffff,   // End of processor-specific
+  DT_HIPROC = 0x7fffffff    // End of processor-specific
   //DT_PROCNUM = DT_MIPS_NUM, // Most used by any processor
 };
 
-// DT_* entries which fall between DT_VALRNGHI & DT_VALRNGLO use the
-// Dyn.d_un.d_val field of the Elf*_Dyn structure.  This follows Sun's approach.
-static constexpr std::uint32_t DT_VALRNGLO = 0x6ffffd00;
-static constexpr std::uint32_t DT_GNU_PRELINKED = 0x6ffffdf5;   // Prelinking timestamp
-static constexpr std::uint32_t DT_GNU_CONFLICTSZ = 0x6ffffdf6;  // Size of conflict section
-static constexpr std::uint32_t DT_GNU_LIBLISTSZ = 0x6ffffdf7;   // Size of library list
-static constexpr std::uint32_t DT_CHECKSUM = 0x6ffffdf8;
-static constexpr std::uint32_t DT_PLTPADSZ = 0x6ffffdf9;
-static constexpr std::uint32_t DT_MOVEENT = 0x6ffffdfa;
-static constexpr std::uint32_t DT_MOVESZ = 0x6ffffdfb;
-static constexpr std::uint32_t DT_FEATURE_1 = 0x6ffffdfc;       // Feature selection (DTF_*).
-static constexpr std::uint32_t DT_POSFLAG_1 = 0x6ffffdfd;       // Flags for DT_* entries, effecting the following DT_* entry.
-static constexpr std::uint32_t DT_SYMINSZ = 0x6ffffdfe;         // Size of syminfo table (in bytes)
-static constexpr std::uint32_t DT_SYMINENT = 0x6ffffdff;        // Entry size of syminfo
-static constexpr std::uint32_t DT_VALRNGHI = 0x6ffffdff;
+// DT_* entries which fall between DT_VALRNGHI & DT_VALRNGLO use the Dyn.d_un.d_val field of the Elf*_Dyn structure.
+// This follows Sun's approach.
+enum {
+  DT_VALRNGLO = 0x6ffffd00,
+  DT_GNU_PRELINKED = 0x6ffffdf5,   // Prelinking timestamp
+  DT_GNU_CONFLICTSZ = 0x6ffffdf6,  // Size of conflict section
+  DT_GNU_LIBLISTSZ = 0x6ffffdf7,   // Size of library list
+  DT_CHECKSUM = 0x6ffffdf8,
+  DT_PLTPADSZ = 0x6ffffdf9,
+  DT_MOVEENT = 0x6ffffdfa,
+  DT_MOVESZ = 0x6ffffdfb,
+  DT_FEATURE_1 = 0x6ffffdfc,       // Feature selection (DTF_*).
+  DT_POSFLAG_1 = 0x6ffffdfd,       // Flags for DT_* entries, effecting the following DT_* entry.
+  DT_SYMINSZ = 0x6ffffdfe,         // Size of syminfo table (in bytes)
+  DT_SYMINENT = 0x6ffffdff,        // Entry size of syminfo
+  DT_VALRNGHI = 0x6ffffdff
+};
 #define DT_VALTAGIDX(tag) (DT_VALRNGHI - (tag)) // Reverse order!
 static constexpr std::uint32_t DT_VALNUM = 12;
 
 // DT_* entries which fall between DT_ADDRRNGHI & DT_ADDRRNGLO use the Dyn.d_un.d_ptr field of the Elf*_Dyn structure.
 // If any adjustment is made to the ELF object after it has been built these entries will need to be adjusted.
-static constexpr std::uint32_t DT_ADDRRNGLO = 0x6ffffe00;
-static constexpr std::uint32_t DT_GNU_HASH = 0x6ffffef5;        // GNU-style hash table.
-static constexpr std::uint32_t DT_TLSDESC_PLT = 0x6ffffef6;
-static constexpr std::uint32_t DT_TLSDESC_GOT = 0x6ffffef7;
-static constexpr std::uint32_t DT_GNU_CONFLICT = 0x6ffffef8;    // Start of conflict section
-static constexpr std::uint32_t DT_GNU_LIBLIST = 0x6ffffef9;     // Library list
-static constexpr std::uint32_t DT_CONFIG = 0x6ffffefa;          // Configuration information.
-static constexpr std::uint32_t DT_DEPAUDIT = 0x6ffffefb;        // Dependency auditing.
-static constexpr std::uint32_t DT_AUDIT = 0x6ffffefc;           // Object auditing.
-static constexpr std::uint32_t DT_PLTPAD = 0x6ffffefd;          // PLT padding.
-static constexpr std::uint32_t DT_MOVETAB = 0x6ffffefe;         // Move table.
-static constexpr std::uint32_t DT_SYMINFO = 0x6ffffeff;         // Syminfo table.
-static constexpr std::uint32_t DT_ADDRRNGHI = 0x6ffffeff;
+enum {
+  DT_ADDRRNGLO = 0x6ffffe00,
+  DT_GNU_HASH = 0x6ffffef5,      // GNU-style hash table.
+  DT_TLSDESC_PLT = 0x6ffffef6,
+  DT_TLSDESC_GOT = 0x6ffffef7,
+  DT_GNU_CONFLICT = 0x6ffffef8,  // Start of conflict section
+  DT_GNU_LIBLIST = 0x6ffffef9,   // Library list
+  DT_CONFIG = 0x6ffffefa,        // Configuration information.
+  DT_DEPAUDIT = 0x6ffffefb,      // Dependency auditing.
+  DT_AUDIT = 0x6ffffefc,         // Object auditing.
+  DT_PLTPAD = 0x6ffffefd,        // PLT padding.
+  DT_MOVETAB = 0x6ffffefe,       // Move table.
+  DT_SYMINFO = 0x6ffffeff,       // Syminfo table.
+  DT_ADDRRNGHI = 0x6ffffeff
+};
 #define DT_ADDRTAGIDX(tag) (DT_ADDRRNGHI - (tag))               // Reverse order!
 static constexpr std::uint32_t DT_ADDRNUM = 11;
 
 // The versioning entry types.  The next are defined as part of the GNU extension.
-static constexpr std::uint32_t DT_VERSYM = 0x6ffffff0;
-
-static constexpr std::uint32_t DT_RELACOUNT = 0x6ffffff9;
-static constexpr std::uint32_t DT_RELCOUNT = 0x6ffffffa;
+enum {
+  DT_VERSYM = 0x6ffffff0,
+  DT_RELACOUNT = 0x6ffffff9,
+  DT_RELCOUNT = 0x6ffffffa,
 
 // These were chosen by Sun.
-static constexpr std::uint32_t DT_FLAGS_1 = 0x6ffffffb;         // State flags, see DF_1_* below.
-static constexpr std::uint32_t DT_VERDEF = 0x6ffffffc;          // Address of version definition table
-static constexpr std::uint32_t DT_VERDEFNUM = 0x6ffffffd;       // Number of version definitions
-static constexpr std::uint32_t DT_VERNEED = 0x6ffffffe;         // Address of table with needed versions
-static constexpr std::uint32_t DT_VERNEEDNUM = 0x6fffffff;      // Number of needed versions
+  DT_FLAGS_1 = 0x6ffffffb,         // State flags, see DF_1_* below.
+  DT_VERDEF = 0x6ffffffc,          // Address of version definition table
+  DT_VERDEFNUM = 0x6ffffffd,       // Number of version definitions
+  DT_VERNEED = 0x6ffffffe,         // Address of table with needed versions
+  DT_VERNEEDNUM = 0x6fffffff       // Number of needed versions
+};
 #define DT_VERSIONTAGIDX(tag) (DT_VERNEEDNUM - (tag))           // Reverse order!
 static constexpr std::uint32_t DT_VERSIONTAGNUM = 16;
 
 // Sun added these machine-independent extensions in the "processor-specific" range.  Be compatible.
-static constexpr std::uint32_t DT_AUXILIARY = 0x7ffffffd;       // Shared object to load before self
-static constexpr std::uint32_t DT_FILTER = 0x7fffffff;          // Shared object to get values from
+enum {
+  DT_AUXILIARY = 0x7ffffffd,       // Shared object to load before self
+  DT_FILTER = 0x7fffffff           // Shared object to get values from
+};
 #define DT_EXTRATAGIDX(tag) ((Elf32_Word) - ((Elf32_Sword)(tag) << 1 >> 1) - 1)
 static constexpr std::uint32_t DT_EXTRANUM = 3;
 
