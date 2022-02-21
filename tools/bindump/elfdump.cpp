@@ -6,20 +6,21 @@ using namespace binlab;
 using namespace binlab::ELF;
 
 void ELF::Dump(std::vector<char>& buff) {
-  auto& ehdr = reinterpret_cast<Elf64_Ehdr&>(buff[0]);
   if (!std::memcmp(&buff[0], ELFMAG, SELFMAG)) {
-    if (ehdr.e_ident[EI_CLASS] == ELFCLASS32) {
-      if (ehdr.e_ident[EI_DATA] == ELFDATA2LSB) {
+    if (buff[EI_CLASS] == ELFCLASS32) {
+      if (buff[EI_DATA] == ELFDATA2LSB) {
+        std::cout << "dump ELF32 (little-endian)\n";
         //Dump32LE(buff);
-      } else if (ehdr.e_ident[EI_DATA] == ELFDATA2MSB) {
+      } else if (buff[EI_DATA] == ELFDATA2MSB) {
         std::cerr << "big endian\n";
       } else {
         std::cerr << "invalid ELF data endian\n";
       }
-    } else if (ehdr.e_ident[EI_CLASS] == ELFCLASS64) {
-      if (ehdr.e_ident[EI_DATA] == ELFDATA2LSB) {
+    } else if (buff[EI_CLASS] == ELFCLASS64) {
+      if (buff[EI_DATA] == ELFDATA2LSB) {
+        std::cout << "dump ELF64 (little-endian)\n";
         Dump64LE(buff);
-      } else if (ehdr.e_ident[EI_DATA] == ELFDATA2MSB) {
+      } else if (buff[EI_DATA] == ELFDATA2MSB) {
         std::cerr << "big endian\n";
       } else {
         std::cerr << "invalid ELF data endian\n";
@@ -31,14 +32,14 @@ void ELF::Dump(std::vector<char>& buff) {
 }
 
 void ELF::Dump64LE(std::vector<char>& buff) {
-  auto& ehdr = reinterpret_cast<Elf64_Ehdr&>(buff[0]);
-  auto phdrs = reinterpret_cast<ELF::Elf64_Phdr*>(&buff[ehdr.e_phoff]);
+  auto ehdr = reinterpret_cast<Elf64_Ehdr*>(&buff[0]);
+  auto phdr = reinterpret_cast<Elf64_Phdr*>(&buff[ehdr->e_phoff]);
 
-  Accessor base{&buff[0], phdrs, ehdr.e_phnum};
-  for (auto i = 0; i < ehdr.e_phnum; ++i) {
-    switch (phdrs[i].p_type) {
+  Accessor base{&buff[0], phdr, ehdr->e_phnum};
+  for (auto i = 0; i < ehdr->e_phnum; ++i) {
+    switch (phdr[i].p_type) {
       case PT_DYNAMIC:
-        Dump(base, reinterpret_cast<const ELF::Elf64_Dyn*>(&base[phdrs[i].p_offset]));
+        Dump(base, reinterpret_cast<const Elf64_Dyn*>(&base[phdr[i].p_offset]));
         break;
       default:
         break;
@@ -105,7 +106,7 @@ const Elf64_Sym* GNULookup(const char* strtab, const Elf64_Sym* symtab, const st
   return nullptr;
 }
 
-void ELF::Dump(const Accessor& base, const ELF::Elf64_Dyn* dyns) {
+void ELF::Dump(const Accessor& base, const Elf64_Dyn* dyn) {
   const char* strtab{};
   std::size_t strsz;
 
@@ -114,7 +115,7 @@ void ELF::Dump(const Accessor& base, const ELF::Elf64_Dyn* dyns) {
 
   const std::uint32_t* gnu_hash{};
 
-  for (auto dyn = dyns; dyn->d_tag != DT_NULL; ++dyn) {
+  for (; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
       case DT_STRTAB:
         strtab = reinterpret_cast<const char*>(&base[dyn->d_un.d_ptr]);
@@ -141,10 +142,7 @@ void ELF::Dump(const Accessor& base, const ELF::Elf64_Dyn* dyns) {
     return;
   }
 
-  std::string name;
-  std::cout << "please input symbol name: ";
-  std::cin >> name;
-
+  std::string name = "_ZTISt13runtime_error";
   auto sym = GNULookup<std::uint64_t>(strtab, symtab, gnu_hash, name.c_str());
   std::cout << std::hex;
   if (sym != nullptr) {

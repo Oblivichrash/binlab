@@ -33,9 +33,11 @@ void PE::Dump(std::vector<char>& buff) {
       Accessor base{&buff[0], IMAGE_FIRST_SECTION(&nt), nt.FileHeader.NumberOfSections};
       switch (nt.OptionalHeader.Magic) {
         case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+          std::cout << "dump PE64\n";
           Dump(base, nt);
           break;
         case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+          std::cout << "dump PE32\n";
           Dump(base, reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos.e_lfanew]));
           break;
         default:
