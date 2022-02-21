@@ -35,7 +35,7 @@ class Accessor {
 void Dump(std::vector<char>& buff);
 void Dump64LE(std::vector<char>& buff);
 
-void Dump(const Accessor& base, const ELF::Elf64_Dyn* dyns);
+void Dump(const Accessor& base, const Elf64_Dyn* dyn);
 
 }  // namespace ELF
 }  // namespace binlab
