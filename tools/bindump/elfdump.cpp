@@ -47,7 +47,7 @@ void ELF::Dump64LE(std::vector<char>& buff) {
   }
 }
 
-std::uint32_t gnu_hash(const std::uint8_t* name) {
+constexpr std::uint32_t gnu_hash_(const std::uint8_t* name) {
   std::uint32_t h = 5381;
 
   for (; *name; name++) {
@@ -57,52 +57,110 @@ std::uint32_t gnu_hash(const std::uint8_t* name) {
   return h;
 }
 
+class gnu_hash {
+ public:
+  using key_type = const char*;
+  using mapped_type = Elf64_Sym;
+  using bloom_type = std::uint64_t;
+  using size_type = std::uint32_t;
+  using const_local_iterator = const std::uint32_t*;
+
+  gnu_hash(const void* hash) : hash_{static_cast<const std::uint32_t*>(hash)} {}
+
+  // Bucket interface
+  const_local_iterator cbegin(size_type n) const noexcept;
+  //const_local_iterator cend(size_type n) const noexcept;
+  size_type bucket_count() const noexcept;
+  //size_type bucket_size(size_type n) const noexcept;
+  size_type bucket(const key_type key) const noexcept;
+
+  // Non-standared
+  size_type symbol_offset() const noexcept { return hash_[1]; }
+  const_local_iterator buckets() const noexcept { return reinterpret_cast<const_local_iterator>(&(bloom()[bloom_count()])); }
+  bool bloom_filter(std::uint32_t keyhash) const noexcept;
+
+ private:
+  using const_bloom_iterator = const bloom_type*;
+
+  size_type bloom_count() const noexcept { return hash_[2]; }
+  size_type bloom_shift() const noexcept { return hash_[3]; }
+  const_bloom_iterator bloom() const noexcept { return reinterpret_cast<const_bloom_iterator>(&hash_[4]); }
+
+  const_local_iterator chain() const noexcept { return &(buckets()[bucket_count()]); }
+
+  const std::uint32_t* hash_;
+};
+
+// Bucket interface
+inline auto gnu_hash::cbegin(size_type n) const noexcept -> const_local_iterator {
+  return &chain()[(buckets()[n]) - symbol_offset()];
+}
+
+//inline auto gnu_hash::cend(size_type n) const noexcept -> const_local_iterator {
+//  if (n < bucket_count()) {
+//    return cbegin(n + 1);
+//  } else {
+//    auto iter = cbegin(n);
+//    while (!(*iter++ & 1));  // bucket end with ((*iter & 1) == true)
+//    return iter;
+//  }
+//}
+
+inline auto gnu_hash::bucket_count() const noexcept -> size_type {
+  return hash_[0];
+}
+
+//inline auto gnu_hash::bucket_size(size_type n) const noexcept -> size_type {
+//  size_type count = 1;
+//  for (auto iter = cbegin(n); !(*iter & 1); ++iter) {
+//    ++count;
+//  }
+//  return ++count;
+//}
+
+inline auto gnu_hash::bucket(const key_type key) const noexcept -> size_type {
+  auto keyhash = ::gnu_hash_(reinterpret_cast<const std::uint8_t*>(key));
+  return (keyhash % bucket_count());
+}
+
+inline bool gnu_hash::bloom_filter(std::uint32_t keyhash) const noexcept {
+  constexpr auto num_bits = sizeof(bloom_type) * 8;
+  auto word = bloom()[(keyhash / num_bits) % bloom_count()];
+  bloom_type mask = 0;
+  mask |= static_cast<bloom_type>(1) << (keyhash % num_bits);
+  mask |= static_cast<bloom_type>(1) << ((keyhash >> bloom_shift()) % num_bits);
+  return (word & mask) == mask;
+}
+
 // Reference: https://flapenguin.me/elf-dt-gnu-hash
-template <typename bloom_el_t>
-const Elf64_Sym* GNULookup(const char* strtab, const Elf64_Sym* symtab, const std :: uint32_t* hashtab, const char* name ) {
-  constexpr auto ELFCLASS_BITS = sizeof(bloom_el_t) * 8;
+const Elf64_Sym* GNULookup(const char* strtab, const Elf64_Sym* symtab, const std::uint32_t* hashtab, const char* name) {
+  const std::uint32_t namehash = gnu_hash_(reinterpret_cast<const std::uint8_t*>(name));
 
-  const std::uint32_t namehash = gnu_hash(reinterpret_cast<const std::uint8_t*>(name));
-
-  auto nbuckets = hashtab[0];
-  auto symoffset = hashtab[1];
-  auto bloom_size = hashtab[2];
-  auto bloom_shift = hashtab[3];
-  auto bloom = reinterpret_cast<const bloom_el_t*>(&hashtab[4]);
-  auto buckets = reinterpret_cast<const std::uint32_t*>(&bloom[bloom_size]);
-  auto chain = &buckets[nbuckets];
-
-  bloom_el_t word = bloom[(namehash / ELFCLASS_BITS) % bloom_size];
-  bloom_el_t mask = 0;
-  mask |= static_cast<bloom_el_t>(1) << (namehash % ELFCLASS_BITS);
-  mask |= static_cast<bloom_el_t>(1) << ((namehash >> bloom_shift) % ELFCLASS_BITS);
-
-  if ((word & mask) != mask) {
+  gnu_hash hash{static_cast<const void*>(hashtab)};
+  if (!hash.bloom_filter(namehash)) {
     std::cerr << "at least one bit is not set, symbol is surely missing\n";
     return nullptr;
   }
 
-  auto symix = buckets[namehash % nbuckets];
-  if (symix < symoffset) {
+  auto bucket = hash.bucket(name);
+
+  auto symix = hash.buckets()[bucket];
+  if (symix < hash.symbol_offset()) {
     std::cerr << "invalid symbol index\n";
     return nullptr;
   }
 
-  for (std::uint32_t hash;; ++symix) {
-    hash = chain[symix - symoffset];
-
-    if ((namehash | 1) == (hash | 1)) {
+  auto first = hash.cbegin(bucket);
+  for (const std::uint32_t* iter = first; iter; ++iter, ++symix) {
+    if ((namehash | 1) == (*iter | 1)) {
       if (!std::strcmp(name, &strtab[symtab[symix].st_name])) {
         return &symtab[symix];
       }
     }
-
-    // Chain ends with an element with the lowest bit set to 1.
-    if (hash & 1) {
+    if (*iter & 1) {
       break;
     }
   }
-
   return nullptr;
 }
 
@@ -143,7 +201,7 @@ void ELF::Dump(const Accessor& base, const Elf64_Dyn* dyn) {
   }
 
   std::string name = "_ZTISt13runtime_error";
-  auto sym = GNULookup<std::uint64_t>(strtab, symtab, gnu_hash, name.c_str());
+  auto sym = GNULookup(strtab, symtab, gnu_hash, name.c_str());
   std::cout << std::hex;
   if (sym != nullptr) {
     std::cout << std::setw(16) << "name: " << &strtab[sym->st_name] << '\n';
