@@ -8,7 +8,6 @@ Executable Binary Laboratory
 
 ```
 cmake [options] -S binlab -B build
-cd build
 ```
 
 - `-DCMAKE_BUILD_TYPE=type` Multi-configuration buildsystems (i.e. Visual Studio, Xcode) ignore this setting. Valid options are: Debug(default), Release, RelWithDebInfo, and MinSizeRel.
@@ -17,7 +16,7 @@ cd build
 ### Invoking the Buildsystem
 
 ```
-cmake --build . [options]
+cmake --build build [options]
 ```
 
 - `--target <target>` The default target (i.e. cmake --build . or make) will build all of binlab.
@@ -26,6 +25,7 @@ cmake --build . [options]
 ### Testing
 
 ```
+cd build
 ctest [options]
 ```
 
@@ -35,7 +35,7 @@ ctest [options]
 ### Installing
 
 ```
-cmake --install . [options]
+cmake --install build [options]
 ```
 
 - `--prefix <directory>` Override `CMAKE_INSTALL_PREFIX`

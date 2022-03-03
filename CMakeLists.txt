@@ -13,7 +13,7 @@ add_subdirectory("tools/bindump")
 
 enable_testing()
 
-add_test(NAME DumpPE32 COMMAND bindump "${PROJECT_SOURCE_DIR}/sample/PE32/kernel32.dll")
-add_test(NAME DumpPE64 COMMAND bindump "${PROJECT_SOURCE_DIR}/sample/PE64/kernel32.dll")
+add_test(NAME DumpPE32 COMMAND bindump "${PROJECT_SOURCE_DIR}/test/sample/PE32/kernel32.dll")
+add_test(NAME DumpPE64 COMMAND bindump "${PROJECT_SOURCE_DIR}/test/sample/PE64/kernel32.dll")
 
-add_test(NAME DumpELF64LE COMMAND bindump "${PROJECT_SOURCE_DIR}/sample/ELF64LE/libstdc++.so.6")
+add_test(NAME DumpELF64LE COMMAND bindump "${PROJECT_SOURCE_DIR}/test/sample/ELF64LE/libstdc++.so.6")
