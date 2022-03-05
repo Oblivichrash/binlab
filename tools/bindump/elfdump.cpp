@@ -112,4 +112,8 @@ void ELF::Dump(const Accessor& base, const Elf64_Dyn* dyn) {
 
   const char* name = "_ZTISt13runtime_error";
   std::cout << std::hex << std::pair{name, symbol.at(name)} << std::dec << '\n';
+
+  for (std::uint32_t i = 0; i < symbol.bucket_count(); i++) {
+    std::cout << "bucket " << i << ": " << symbol.bucket_size(i) << '\n';
+  }
 }

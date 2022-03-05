@@ -12,11 +12,9 @@ namespace ELF {
 
 constexpr std::uint32_t gnu_hash_(const std::uint8_t* name) {
   std::uint32_t h = 5381;
-
   for (; *name; name++) {
     h = (h << 5) + h + *name;
   }
-
   return h;
 }
 
@@ -32,10 +30,14 @@ class symbols {
   using const_iterator          = const mapped_type*;
   using const_local_iterator    = const std::uint32_t*;
 
-  symbols(const key_type strtab, const mapped_type* symtab, const void* hash)
-      : strtab_{strtab}, symtab_{symtab}, hash_{static_cast<const std::uint32_t*>(hash)} {}
+  symbols(const key_type strtab, const mapped_type* symtab, const void* hash) : strtab_{strtab}, first_{symtab} {
+    hash_ = static_cast<const std::uint32_t*>(hash);
+    bloom_ = reinterpret_cast<const_bloom_pointer>(&hash_[4]);
+    buckets_ = reinterpret_cast<const_bucket_pointer>(&(bloom_[bloom_count()]));
+    chain_ = reinterpret_cast<const_local_iterator>(&buckets_[bucket_count()]);
+  }
 
-  const_iterator cbegin() const noexcept { return symtab_; }
+  const_iterator cbegin() const noexcept { return first_; }
 
   bool contains(const key_type& k) const;
 
@@ -43,12 +45,13 @@ class symbols {
 
   // Bucket interface
   const_local_iterator cbegin(size_type n) const noexcept {
-    difference_type index = buckets()[n] - symbol_offset();
-    return ((index < 0) ? nullptr : &chain()[index]);
+    difference_type index = buckets_[n];
+    index -= symbol_offset();
+    return ((index < 0) ? nullptr : &chain_[index]);
   }
   //const_local_iterator cend(size_type n) const noexcept;
   size_type bucket_count() const noexcept { return hash_[0]; }
-  //size_type bucket_size(size_type n) const noexcept;
+  size_type bucket_size(size_type n) const noexcept;
   size_type bucket(key_type key) const noexcept {
     auto keyhash = gnu_hash_(reinterpret_cast<const std::uint8_t*>(key));
     return (keyhash % bucket_count());
@@ -57,21 +60,22 @@ class symbols {
  private:
   // Non-standared
   using bloom_type = std::conditional_t<std::is_same_v<mapped_type, Elf64_Sym>, std::uint64_t, std::uint32_t>;
-  using const_bloom_iterator = const bloom_type*;
+  using const_bloom_pointer = const bloom_type*;
+  using const_bucket_pointer = const std::uint32_t*;
 
   size_type symbol_offset() const noexcept { return hash_[1]; }
-  const_local_iterator buckets() const noexcept { return reinterpret_cast<const_local_iterator>(&(bloom()[bloom_count()])); }
   bool bloom_filter(std::uint32_t keyhash) const noexcept;
 
   size_type bloom_count() const noexcept { return hash_[2]; }
   size_type bloom_shift() const noexcept { return hash_[3]; }
-  const_bloom_iterator bloom() const noexcept { return reinterpret_cast<const_bloom_iterator>(&hash_[4]); }
 
-  const_local_iterator chain() const noexcept { return &(buckets()[bucket_count()]); }
+  const key_type strtab_;
+  const_iterator first_;
 
   const std::uint32_t* hash_;
-  const mapped_type* symtab_;
-  const key_type strtab_;
+  const_bloom_pointer bloom_;
+  const_bucket_pointer buckets_;
+  const_local_iterator chain_;
 };
 
 template <typename Key, typename T>
@@ -79,7 +83,7 @@ inline bool symbols<Key, T>::contains(const key_type& name) const {
   const std::uint32_t namehash = gnu_hash_(reinterpret_cast<const std::uint8_t*>(name));
 
   if (bloom_filter(namehash)) {
-    auto n = bucket(name);
+    auto n = namehash % bucket_count();
     auto sym = cbegin() + buckets()[n];
     for (auto iter = cbegin(n);; ++sym, ++iter) {
       if ((namehash | 1) == (*iter | 1)) {
@@ -100,8 +104,8 @@ auto symbols<Key, T>::at(const key_type& name) const -> const mapped_type& {
   const std::uint32_t namehash = gnu_hash_(reinterpret_cast<const std::uint8_t*>(name));
 
   if (bloom_filter(namehash)) {
-    auto n = bucket(name);
-    auto sym = cbegin() + buckets()[n];
+    auto n = namehash % bucket_count();
+    auto sym = cbegin() + buckets_[n];
     for (auto iter = cbegin(n);; ++sym, ++iter) {
       if ((namehash | 1) == (*iter | 1)) {
         if (!std::strcmp(name, &strtab_[sym->st_name])) {
@@ -126,21 +130,26 @@ auto symbols<Key, T>::at(const key_type& name) const -> const mapped_type& {
 //  }
 //}
 
-//inline auto gnu_hash::bucket_size(size_type n) const noexcept -> size_type {
-//  size_type count = 1;
-//  for (auto iter = cbegin(n); !(*iter & 1); ++iter) {
-//    ++count;
-//  }
-//  return ++count;
-//}
+template <typename Key, typename T>
+inline auto symbols<Key, T>::bucket_size(size_type n) const noexcept -> size_type {
+  size_type count = 0;
+  auto iter = cbegin(n);
+  if (iter != nullptr) {
+    for (; !(*iter & 1); ++iter) {
+      ++count;
+    }
+    ++count;
+  }
+  return count;
+}
 
 template <typename Key, typename T>
 inline bool symbols<Key, T>::bloom_filter(std::uint32_t keyhash) const noexcept {
-  constexpr auto num_bits = sizeof(bloom_type) * 8;
-  auto word = bloom()[(keyhash / num_bits) % bloom_count()];
+  constexpr auto bits = sizeof(bloom_type) * 8;
+  auto word = bloom_[(keyhash / bits) % bloom_count()];
   bloom_type mask = 0;
-  mask |= static_cast<bloom_type>(1) << (keyhash % num_bits);
-  mask |= static_cast<bloom_type>(1) << ((keyhash >> bloom_shift()) % num_bits);
+  mask |= static_cast<bloom_type>(1) << (keyhash % bits);
+  mask |= static_cast<bloom_type>(1) << ((keyhash >> bloom_shift()) % bits);
   return (word & mask) == mask;
 }
 
