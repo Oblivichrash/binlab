@@ -7,7 +7,7 @@ using namespace binlab;
 using namespace binlab::ELF;
 
 inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf32_Sym&>& symbol) {
-  const auto s = symbol.second;
+  const auto& s = symbol.second;
   os << std::setw(16) << "name: " << symbol.first << '\n';
   os << std::setw(16) << "bind: " << std::showbase << ELF32_ST_BIND(s.st_info) << '\n';
   os << std::setw(16) << "type: " << std::showbase << ELF32_ST_TYPE(s.st_info) << '\n';
@@ -19,7 +19,7 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, c
 }
 
 inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf64_Sym&>& symbol) {
-  const auto s = symbol.second;
+  const auto& s = symbol.second;
   os << std::setw(16) << "name: " << symbol.first << '\n';
   os << std::setw(16) << "bind: " << std::showbase << ELF64_ST_BIND(s.st_info) << '\n';
   os << std::setw(16) << "type: " << std::showbase << ELF64_ST_TYPE(s.st_info) << '\n';
@@ -108,12 +108,25 @@ void ELF::Dump(const Accessor& base, const Elf64_Dyn* dyn) {
     return;
   }
 
+  std::cout << std::hex;
+
   symbols symbol{strtab, symtab, static_cast<const void*>(gnu_hash)};
 
   const char* name = "_ZTISt13runtime_error";
-  std::cout << std::hex << std::pair{name, symbol.at(name)} << std::dec << '\n';
+  auto iter = symbol.find(name);
+  if (iter != symbol.end()) {
+    std::cout << std::pair{name, *iter} << '\n';
+  } else {
+    std::cerr << "coundn't find " << name << '\n';
+  }
 
   for (std::uint32_t i = 0; i < symbol.bucket_count(); i++) {
-    std::cout << "bucket " << i << ": " << symbol.bucket_size(i) << '\n';
+    std::cout << "bucket " << std::setw(5) << i << " size: " << symbol.bucket_size(i) << '\n';
   }
+
+  std::size_t count = 0;
+  for (auto iter = symbol.begin(); iter != symbol.end(); ++iter, ++count) {
+    std::cout << std::setw(5) << count << ":" << &strtab[iter->st_name] << '\n';
+  }
+  std::cout << "symbol set size: " << symbol.size() << '\n';
 }
