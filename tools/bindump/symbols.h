@@ -1,4 +1,5 @@
-// symbols.h: reference: https://flapenguin.me/elf-dt-gnu-hash
+// symbols.h: ELF symbols, for more about DT_GNU_HASH, see: https://flapenguin.me/elf-dt-gnu-hash
+//
 
 #ifndef BINLAB_SYMBOLS_ELF_SYMBOLS_H_
 #define BINLAB_SYMBOLS_ELF_SYMBOLS_H_
@@ -8,8 +9,25 @@
 #include <stdexcept>
 #include <utility>
 
+#include "binlab/BinaryFormat/ELF.h"
+
 namespace binlab {
 namespace ELF {
+
+template <typename T>
+struct bloom_traits;
+
+template <>
+struct bloom_traits<Elf64_Sym> {
+  using value_type = std::uint64_t;
+  static constexpr std::size_t num_bits = sizeof(value_type) * 8;
+};
+
+template <>
+struct bloom_traits<Elf32_Sym> {
+  using value_type = std::uint32_t;
+  static constexpr std::size_t num_bits = sizeof(value_type) * 8;
+};
 
 constexpr std::uint32_t gnu_hash_(const std::uint8_t* name) {
   std::uint32_t h = 5381;
@@ -59,8 +77,8 @@ class symbols {
   size_type bucket(key_type k) const noexcept;
 
  private:
-  // Non-standared
-  using bloom_type = std::conditional_t<std::is_same_v<mapped_type, Elf64_Sym>, std::uint64_t, std::uint32_t>;
+  // non-standared
+  using bloom_type = typename bloom_traits<mapped_type>::value_type;
   using const_bloom_pointer = const bloom_type*;
   using const_bucket_pointer = const std::uint32_t*;
 
@@ -139,7 +157,7 @@ inline auto symbols<Key, T>::bucket(key_type key) const noexcept -> size_type {
 
 template <typename Key, typename T>
 inline bool symbols<Key, T>::bloom_filter(std::uint32_t keyhash) const noexcept {
-  constexpr auto bits = sizeof(bloom_type) * 8;
+  constexpr auto bits = bloom_traits<mapped_type>::num_bits;
   auto word = bloom_[(keyhash / bits) % bloom_count()];
   bloom_type mask = 0;
   mask |= static_cast<bloom_type>(1) << (keyhash % bits);

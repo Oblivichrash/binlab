@@ -12,24 +12,46 @@
 #include <vector>
 
 #include "binlab/BinaryFormat/ELF.h"
+#include "segments.h"
 
 namespace binlab {
+
+template <>
+struct segment_traits<ELF::Elf64_Phdr> {
+  using value_type = ELF::Elf64_Phdr;
+  using address_type = std::uint64_t;
+  using size_type = std::uint64_t;
+
+  static constexpr address_type virtual_address(const value_type& segment) { return segment.p_vaddr; }
+  static constexpr address_type file_offset(const value_type& segment) { return segment.p_offset; }
+
+  static constexpr size_type file_size(const value_type& segment) { return segment.p_filesz; }
+  static constexpr size_type memory_size(const value_type& segment) { return segment.p_memsz; }
+};
+
+template <>
+struct segment_traits<ELF::Elf32_Phdr> {
+  using value_type = ELF::Elf32_Phdr;
+  using address_type = std::uint64_t;
+  using size_type = std::uint64_t;
+
+  static constexpr address_type virtual_address(const value_type& segment) { return segment.p_vaddr; }
+  static constexpr address_type file_offset(const value_type& segment) { return segment.p_offset; }
+
+  static constexpr size_type file_size(const value_type& segment) { return segment.p_filesz; }
+  static constexpr size_type memory_size(const value_type& segment) { return segment.p_memsz; }
+};
+
 namespace ELF {
 
-class Accessor {
+class Accessor : segments<ELF::Elf64_Phdr> {
  public:
-  using Section = ELF::Elf64_Phdr;
-  using Address = std::uint64_t;
+  Accessor(void* base, const_iterator first, size_type num) : segments(first, num), base_{static_cast<char*>(base)} {}
 
-  Accessor(void* base, const Section* first, const Address num)
-      : base_{static_cast<char*>(base)}, first_{first}, last_{first + num} {}
-
-  const char& operator[](Address offset) const { return base_[offset]; }
+  const char& operator[](address_type offset) const { return base_[offset]; }
 
  private:
   char* base_;
-  const Section* first_;
-  const Section* last_;
 };
 
 void Dump(std::vector<char>& buff);

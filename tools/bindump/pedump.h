@@ -10,40 +10,49 @@
 #include <vector>
 
 #include "binlab/BinaryFormat/COFF.h"
+#include "segments.h"
 
 namespace binlab {
+
+template <>
+struct segment_traits<COFF::IMAGE_SECTION_HEADER> {
+  using value_type = COFF::IMAGE_SECTION_HEADER;
+  using address_type = std::uint64_t;
+  using size_type = std::uint64_t;
+
+  static constexpr address_type virtual_address(const value_type& segment) { return segment.VirtualAddress; }
+  static constexpr address_type file_offset(const value_type& segment) { return segment.PointerToRawData; }
+
+  static constexpr size_type file_size(const value_type& segment) { return segment.SizeOfRawData; }
+  static constexpr size_type memory_size(const value_type& segment) { return segment.Misc.VirtualSize; }
+};
+
 namespace PE {
 
-class Accessor {
+class Accessor : segments<COFF::IMAGE_SECTION_HEADER> {
  public:
-  using Section = COFF::IMAGE_SECTION_HEADER;
-  using Address = std::uint64_t;
+  Accessor(void* base, const_iterator first, size_type num) : segments(first, num), base_{static_cast<char*>(base)} {}
 
-  Accessor(void* base, const Section* first, const Address num)
-      : base_{static_cast<char*>(base)}, first_{first}, last_{first + num} {}
-
-  const char& operator[](Address offset) const {
-    return base_[RelativeVirtualAddressToFileOffset(static_cast<Address>(offset))];
+  const char& operator[](address_type offset) const {
+    return base_[RelativeVirtualAddressToFileOffset(static_cast<address_type>(offset))];
   }
 
  private:
-  Address RelativeVirtualAddressToFileOffset(const Address rva) const {
-    auto pred = [rva](const Section& section) {
-      Address section_base = section.VirtualAddress;
-      return std::clamp(rva, section_base, section_base + section.SizeOfRawData) == rva;
+  address_type RelativeVirtualAddressToFileOffset(const address_type rva) const {
+    auto pred = [rva](const value_type& section) {
+      address_type section_base = traits_type::virtual_address(section);
+      return std::clamp(rva, section_base, section_base + traits_type::file_size(section)) == rva;
     };
 
     auto iter = std::find_if(first_, last_, pred);
     if (iter == last_) {
       throw std::out_of_range{"virtual address out of range"};
     }
-    return iter->PointerToRawData + (rva - iter->VirtualAddress);
+    return traits_type::file_offset(*iter) + (rva - traits_type::virtual_address(*iter));
   }
 
  private:
   char* base_;
-  const Section* first_;
-  const Section* last_;
 };
 
 void Dump(std::vector<char>& buff);

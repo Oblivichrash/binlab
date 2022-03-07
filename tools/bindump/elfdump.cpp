@@ -1,13 +1,14 @@
 // tools/bindump/elfdump.cpp:
 
 #include "elfdump.h"
+#include "segments.h"
 #include "symbols.h"
 
 using namespace binlab;
 using namespace binlab::ELF;
 
-inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf32_Sym&>& symbol) {
-  const auto& s = symbol.second;
+inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf32_Sym*>& symbol) {
+  const auto& s = *symbol.second;
   os << std::setw(16) << "name: " << symbol.first << '\n';
   os << std::setw(16) << "bind: " << std::showbase << ELF32_ST_BIND(s.st_info) << '\n';
   os << std::setw(16) << "type: " << std::showbase << ELF32_ST_TYPE(s.st_info) << '\n';
@@ -18,8 +19,8 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, c
   return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf64_Sym&>& symbol) {
-  const auto& s = symbol.second;
+inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const Elf64_Sym*>& symbol) {
+  const auto& s = *symbol.second;
   os << std::setw(16) << "name: " << symbol.first << '\n';
   os << std::setw(16) << "bind: " << std::showbase << ELF64_ST_BIND(s.st_info) << '\n';
   os << std::setw(16) << "type: " << std::showbase << ELF64_ST_TYPE(s.st_info) << '\n';
@@ -115,7 +116,7 @@ void ELF::Dump(const Accessor& base, const Elf64_Dyn* dyn) {
   const char* name = "_ZTISt13runtime_error";
   auto iter = symbol.find(name);
   if (iter != symbol.end()) {
-    std::cout << std::pair{name, *iter} << '\n';
+    std::cout << std::pair{name, iter} << '\n';
   } else {
     std::cerr << "coundn't find " << name << '\n';
   }
