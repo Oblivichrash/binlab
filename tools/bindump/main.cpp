@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) try {
     if (is.seekg(0, std::ios::beg).read(&buff[0], size)) {
       switch (buff[0]) {
         case 'M':
-          PE::Dump(buff);
+          COFF::Dump(buff);
           break;
         case 0x7f:  // ELFMAG0
           ELF::Dump(buff);

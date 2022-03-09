@@ -3,23 +3,25 @@
 #ifndef BINLAB_SEGMENTS_H_
 #define BINLAB_SEGMENTS_H_
 
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
+#include <type_traits>
+
+#include "binlab/Traits/bin_traits.h"
 
 namespace binlab {
 
 template <typename T>
-struct segment_traits;
-
-template <typename T, typename Traits = segment_traits<T>>
 class segments {
  public:
-  using value_type = T;
-  using iterator = T*;
-  using const_iterator = const T*;
-  using size_type = typename Traits::size_type;
-  using address_type = typename Traits::address_type;
+  using traits_type         = traits::segment_traits<T>;
 
-  using traits_type = Traits;
+  using value_type          = typename traits_type::value_type;
+  using iterator            = typename traits_type::iterator;
+  using const_iterator      = typename traits_type::const_iterator;
+  using size_type           = typename traits_type::size_type;
+  using address_type        = typename traits_type::address_type;
 
   segments(const_iterator first, const_iterator last) : first_{first}, last_{last} {}
   segments(const_iterator first, size_type size) : first_{first}, last_{first + size} {}
@@ -31,10 +33,50 @@ class segments {
   // capacity
   size_type size() const noexcept { return std::distance(begin(), end()); }
 
- protected:
+ private:
   const_iterator first_;
   const_iterator last_;
 };
+
+template <typename SegmentIt, typename AddressType>
+auto virtual_offset_to_file_offset(SegmentIt first, SegmentIt last, AddressType address) -> AddressType {
+  using Traits          = traits::segment_traits<typename std::iterator_traits<SegmentIt>::value_type>;
+
+  using difference_type = typename Traits::difference_type;
+  using address_type    = typename Traits::address_type;
+
+  static_assert(std::is_convertible_v<AddressType, address_type>, "address type error");
+
+  address_type result = 0;
+  for (auto iter = first; iter != last; ++iter) {
+    address_type base = Traits::virtual_offset(*iter);
+    if (std::clamp(address, base, base + Traits::virtual_size(*iter)) == address) {
+      difference_type offset = address - base;
+      result = Traits::file_offset(*iter) + offset;
+    }
+  }
+  return result;
+}
+
+template <typename SegmentIt, typename AddressType>
+auto file_offset_to_virtual_offset(SegmentIt first, SegmentIt last, AddressType address) -> AddressType {
+  using Traits          = traits::segment_traits<typename std::iterator_traits<SegmentIt>::value_type>;
+
+  using difference_type = typename Traits::difference_type;
+  using address_type    = typename Traits::address_type;
+
+  static_assert(std::is_convertible_v<AddressType, address_type>, "address type error");
+
+  address_type result = 0;
+  for (auto iter = first; iter != last; ++iter) {
+    address_type base = Traits::file_offset(*iter);
+    if (std::clamp(address, base, base + Traits::file_size(*iter)) == address) {
+      difference_type offset = address - base;
+      result = Traits::virtual_offset(*iter) + offset;
+    }
+  }
+  return result;
+}
 
 }  // namespace binlab
 
