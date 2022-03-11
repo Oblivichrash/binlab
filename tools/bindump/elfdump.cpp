@@ -53,7 +53,7 @@ struct dyn_traits<Elf32_Dyn> {
 };
 
 template <typename T>
-inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, const T*>& symbol) {
+inline std::ostream& operator<<(std::ostream& os, const std::pair<char*, T*>& symbol) {
   using Traits = sym_traits<T>;
 
   const auto& s = *symbol.second;
@@ -68,26 +68,26 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<const char*, c
 }
 
 template <typename Elf_Phdr, typename Elf_Dyn>
-void DumpSym(const Accessor<Elf_Phdr>& base, const Elf_Dyn* dyn) {
+void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   using Traits = dyn_traits<Elf_Dyn>;
 
   using Elf_Sym = typename dyn_traits<Elf_Dyn>::Elf_Sym;
 
-  const char* strtab{};
+  char* strtab{};
   std::size_t strsz;
 
-  const Elf_Sym* symtab{};
+  Elf_Sym* symtab{};
   std::size_t syment;
 
-  const std::uint32_t* gnu_hash{};
+  std::uint32_t* gnu_hash{};
 
   for (; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
       case DT_STRTAB:
-        strtab = reinterpret_cast<const char*>(&base[dyn->d_un.d_ptr]);
+        strtab = reinterpret_cast<char*>(&base[dyn->d_un.d_ptr]);
         break;
       case DT_SYMTAB:
-        symtab = reinterpret_cast<const Elf_Sym*>(&base[dyn->d_un.d_ptr]);
+        symtab = reinterpret_cast<Elf_Sym*>(&base[dyn->d_un.d_ptr]);
         break;
       case DT_STRSZ:
         strsz = dyn->d_un.d_val;
@@ -96,7 +96,7 @@ void DumpSym(const Accessor<Elf_Phdr>& base, const Elf_Dyn* dyn) {
         syment = dyn->d_un.d_val;
         break;
       case DT_GNU_HASH:
-        gnu_hash = reinterpret_cast<const std::uint32_t*>(&base[dyn->d_un.d_ptr]);
+        gnu_hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
         break;
       default:
         break;
@@ -110,15 +110,19 @@ void DumpSym(const Accessor<Elf_Phdr>& base, const Elf_Dyn* dyn) {
 
   std::cout << std::hex;
 
-  symbols symbol{strtab, symtab, static_cast<const void*>(gnu_hash)};
+  symbols symbol{strtab, symtab, static_cast<void*>(gnu_hash)};
 
-  const char* name = "_ZTISt13runtime_error";
-  auto iter = symbol.find(name);
-  if (iter != symbol.end()) {
-    std::cout << std::pair{name, iter} << '\n';
-  } else {
-    std::cerr << "coundn't find " << name << '\n';
+  std::size_t counter = 0;
+  for (const auto& s : symbol) {
+    auto name = &strtab[s.st_name];
+    auto iter = symbol.find(name);
+    if (iter != symbol.end()) {
+      ++counter;
+      std::cout << std::dec << std::setw(4) << counter << ": " << name << '\n';
+    }
   }
+  std::cout << "found " << counter << " symbols!\n";
+  std::cout << "symbol table size: " << symbol.size() << '\n';
 }
 
 void Dump64LE(std::vector<char>& buff) {
@@ -129,7 +133,7 @@ void Dump64LE(std::vector<char>& buff) {
   for (auto i = 0; i < ehdr->e_phnum; ++i) {
     switch (phdr[i].p_type) {
       case PT_DYNAMIC:
-        DumpSym(base, reinterpret_cast<const Elf64_Dyn*>(&base[phdr[i].p_vaddr]));
+        DumpSym(base, reinterpret_cast<Elf64_Dyn*>(&base[phdr[i].p_vaddr]));
         break;
       default:
         break;
@@ -145,7 +149,7 @@ void Dump32LE(std::vector<char>& buff) {
   for (auto i = 0; i < ehdr->e_phnum; ++i) {
     switch (phdr[i].p_type) {
       case PT_DYNAMIC:
-        DumpSym(base, reinterpret_cast<const Elf32_Dyn*>(&base[phdr[i].p_vaddr]));
+        DumpSym(base, reinterpret_cast<Elf32_Dyn*>(&base[phdr[i].p_vaddr]));
         break;
       default:
         break;
