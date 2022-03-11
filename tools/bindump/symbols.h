@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <unordered_map>
+
 #include "binlab/BinaryFormat/ELF.h"
 
 namespace binlab {
@@ -35,6 +37,112 @@ constexpr std::uint32_t gnu_hash_(const std::uint8_t* name) {
     h = (h << 5) + h + *name;
   }
   return h;
+}
+
+template <typename T>
+class bloom_filter {
+ public:
+  using value_type            = T;
+  using hash_type             = std::uint32_t;
+  using size_type             = value_type;
+  using difference_type       = std::ptrdiff_t;
+  using iterator              = value_type*;
+  using const_iterator        = const iterator;
+
+  bloom_filter(iterator first, size_type count, difference_type shift)
+      : first_{first}, count_{count}, shift_{shift} {}
+
+  // iterators
+  constexpr iterator begin() noexcept { return first_; }
+  constexpr const_iterator begin() const noexcept { return first_; }
+  constexpr iterator end() noexcept { return first_ + count_; }
+  constexpr const_iterator end() const noexcept { return first_ + count_; }
+
+  // capacity
+  constexpr size_type size() const noexcept { return count_; }
+
+  // bloom filter
+  constexpr bool filter(hash_type hash) const noexcept {
+    value_type word = bloom_[(hash / bits) % count_];
+    value_type mask = 0 | value_type{1} << hash1(hash) | value_type{1} << hash2(hash);
+    return (word & mask) == mask;
+  }
+
+  difference_type hash1(hash_type hash) const noexcept { return hash % (sizeof(value_type) * 8); }
+  difference_type hash2(hash_type hash) const noexcept { return (hash >> shift_) % (sizeof(value_type) * 8); }
+
+ private:
+  iterator first_;
+  size_type count_;
+  difference_type shift_;
+};
+
+template <typename Symbol>
+class gnu_hash {
+ public:
+  using value_type            = std::uint32_t;
+  using size_type             = value_type;
+  using pointer               = value_type*;
+  using iterator              = value_type*;
+
+  using local_iterator        = value_type*;
+  using const_local_iterator  = const local_iterator;
+
+  gnu_hash(pointer hash) : hash_{hash}, bloom_{reinterpret_cast<typename bloom_filter::iterator>(&hash[4]), hash[2], hash[3]} {
+    bucket_ = reinterpret_cast<bucket_iterator>(&bloom_.end());
+    first_ = reinterpret_cast<local_iterator>(&bucket_[bucket_count()]);
+    last_ = chain_end(bucket_, bucket_ + bucket_count(), first_);
+  }
+
+  // bucket interface
+  const_local_iterator begin(size_type n) const noexcept;
+  const_local_iterator end(size_type n) const noexcept { return begin(n + 1); }
+  size_type bucket_count() const noexcept { return hash_[0]; }
+  size_type bucket_size(size_type n) const noexcept { std::distance(begin(n), end(n)); }
+  size_type bucket(value_type hash) const noexcept;
+
+ protected:
+  using bloom_filter          = bloom_filter<typename bloom_traits<Symbol>::value_type>;
+  using bucket_iterator       = std::uint32_t*;
+
+  size_type symbol_offset() const noexcept { return hash_[1]; }
+  local_iterator chain_end(bucket_iterator first, bucket_iterator last, local_iterator local_first) const noexcept;
+
+ private:
+  pointer hash_;
+
+  bloom_filter bloom_;
+  bucket_iterator bucket_;
+  local_iterator first_;
+  local_iterator last_;
+};
+
+// bucket interface
+template <typename Symbol>
+inline auto gnu_hash<Symbol>::begin(size_type n) const noexcept-> const_local_iterator {
+  if (n < bucket_count() && bucket_[n] > symbol_offset()) {
+    return first_ + bucket_[n] - symbol_offset();
+  }
+  return last_;
+}
+
+template <typename Symbol>
+inline auto gnu_hash<Symbol>::bucket(value_type hash) const noexcept -> size_type {
+  return bloom_.filter(hash) ? hash % bucket_count() : bucket_count();
+}
+
+template <typename Symbol>
+inline auto gnu_hash<Symbol>::chain_end(bucket_iterator first, bucket_iterator last, local_iterator local_first) const noexcept -> local_iterator {
+  for (; last != first; --last) {
+    if (*last) {  // find last non-empty bucket.
+      break;
+    }
+  }
+
+  auto iter = local_first + *last - symbol_offset();
+  while (!(*iter++ & 1))
+    ;
+  return iter;
 }
 
 template <typename Key, typename T>
