@@ -80,9 +80,13 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   std::size_t syment;
 
   std::uint32_t* gnu_hash{};
+  std::uint32_t* elf_hash{};
 
   for (; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
+      case DT_HASH:
+        elf_hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
+        break;
       case DT_STRTAB:
         strtab = reinterpret_cast<char*>(&base[dyn->d_un.d_ptr]);
         break;
@@ -109,6 +113,13 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   }
 
   std::cout << std::hex;
+
+  sysv_hash hash{strtab, symtab, elf_hash};
+  auto hhhh = elf_hash_(reinterpret_cast<const std::uint8_t*>("Bit_ReleaseFeature"));
+  for (auto iter = hash.begin(hhhh % hash.bucket_count()); *iter; ++iter) {
+    auto name = &strtab[symtab[iter.position()].st_name];
+    std::cout << *iter << ", hash: " << elf_hash_(reinterpret_cast<std::uint8_t*>(name)) << " " << &strtab[symtab[*iter].st_name] << '\n';
+  }
 
   symbols symbol{strtab, symtab, static_cast<void*>(gnu_hash)};
 

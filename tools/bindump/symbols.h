@@ -14,6 +14,117 @@
 namespace binlab {
 namespace ELF {
 
+class const_chain_iterator {
+ public:
+  using iterator_category = std::forward_iterator_tag;
+
+  using value_type      = std::uint32_t;
+  using size_type       = std::size_t;
+  using difference_type = std::ptrdiff_t;
+  using pointer         = const value_type*;
+  using reference       = const value_type&;
+
+  using bucket_type     = std::uint32_t;
+  using bucket_iterator = const std::uint32_t*;
+
+  const_chain_iterator(pointer chain, bucket_iterator bucket, size_type n)
+      : chain_{chain}, bucket_{bucket}, ptr_{&chain[bucket[n]]} {}
+
+  reference operator*() const noexcept { return *ptr_; }
+  pointer operator->() const noexcept { return std::pointer_traits<pointer>::pointer_to(**this); }
+
+  bool operator==(const const_chain_iterator& rhs) const noexcept { return ptr_ == rhs.ptr_; }
+  bool operator!=(const const_chain_iterator& rhs) const noexcept { return !(*this == rhs); }
+
+  difference_type position() const noexcept { return std::distance(chain_, ptr_); }
+
+ protected:
+  bucket_iterator bucket_;
+  pointer chain_;
+
+  pointer ptr_;
+};
+
+class chain_iterator : public const_chain_iterator {
+ public:
+  using base            = const_chain_iterator;
+
+  using pointer         = value_type*;
+  using reference       = value_type&;
+
+  reference operator*() const noexcept { return const_cast<reference>(base::operator*()); }
+  pointer operator->() const noexcept { return std::pointer_traits<pointer>::pointer_to(**this); }
+};
+
+class sysv_const_chain_iterator : public const_chain_iterator {
+ public:
+  sysv_const_chain_iterator(pointer chain, bucket_iterator bucket, size_type n)
+      : const_chain_iterator{chain, bucket, n} {}
+
+  sysv_const_chain_iterator& operator++() noexcept {
+    ptr_ = &chain_[bucket_[*ptr_]];
+    return *this;
+  }
+
+  sysv_const_chain_iterator operator++(int) noexcept {
+    sysv_const_chain_iterator tmp = *this;
+    ptr_ = &chain_[bucket_[*ptr_]];
+    return tmp;
+  }
+
+  explicit operator bool() const noexcept { return **this; }
+};
+
+class sysv_chain_iterator : public sysv_const_chain_iterator {
+  using base            = sysv_const_chain_iterator;
+
+  sysv_chain_iterator& operator++() noexcept {
+    base::operator++();
+    return *this;
+  }
+
+  sysv_chain_iterator operator++(int) noexcept {
+    sysv_chain_iterator tmp = *this;
+    base::operator++();
+    return tmp;
+  }
+};
+
+class gnu_const_chain_iterator : public const_chain_iterator {
+ public:
+  gnu_const_chain_iterator(pointer chain, bucket_iterator bucket, size_type n)
+      : const_chain_iterator{chain, bucket, n} {}
+
+  gnu_const_chain_iterator& operator++() noexcept {
+    ++ptr_;
+    return *this;
+  }
+
+  gnu_const_chain_iterator operator++(int) noexcept {
+    gnu_const_chain_iterator tmp = *this;
+    ++ptr_;
+    return tmp;
+  }
+
+  explicit operator bool() const noexcept { return !(**this | 1); }
+};
+
+class gnu_chain_iterator : public gnu_const_chain_iterator {
+ public:
+  using base = gnu_const_chain_iterator;
+
+  gnu_chain_iterator& operator++() noexcept {
+    base::operator++();
+    return *this;
+  }
+
+  gnu_chain_iterator operator++(int) noexcept {
+    gnu_chain_iterator tmp = *this;
+    base::operator++();
+    return tmp;
+  }
+};
+
 template <typename T>
 struct bloom_traits;
 
@@ -74,6 +185,60 @@ class bloom_filter {
   iterator first_;
   size_type count_;
   difference_type shift_;
+};
+
+template <typename Key>
+struct hash_traits {
+  using key_type              = char*;
+  using mapped_type           = std::uint32_t;
+  using value_type            = Key;
+  using size_type             = std::uint64_t;
+  using difference_type       = std::ptrdiff_t;
+  using pointer               = value_type*;
+  using const_pointer         = const value_type*;
+  using reference             = value_type&;
+  using const_reference       = const value_type&;
+  using iterator              = value_type*;
+  using const_iterator        = const value_type*;
+
+  using local_iterator        = iterator;
+  using const_local_iterator  = const_iterator;
+};
+
+template <typename Key>
+struct gnu_traits : hash_traits<Key> {
+
+  static constexpr std::uint32_t hash_value(const Key k) {
+    auto name = reinterpret_cast<std::uint32_t>(k);
+    std::uint32_t h = 5381;
+    for (; *name; name++) {
+      h = (h << 5) + h + *name;
+    }
+    return h;
+  }
+
+  static constexpr bool compare(const Key val1, const Key val2) { return !std::strcmp(val1, val2); }
+  static constexpr bool compare(const mapped_type val1, const mapped_type val2) { return (val1 | 1) == (val2 | 1); }
+};
+
+template <typename Key>
+struct sysv_traits : hash_traits<Key> {
+
+  static constexpr std::uint32_t hash_value(const Key k) {
+    auto name = reinterpret_cast<std::uint32_t>(k);
+    std::uint32_t h = 0, g = 0;
+    for (; *name; name++) {
+      h = (h << 4) + *name;
+      if (g = h & 0xf0000000) {
+        h ^= g >> 24;
+      }
+      h &= ~g;
+    }
+    return h;
+  }
+
+  static constexpr bool compare(const Key val1, const Key val2) { return !std::strcmp(val1, val2); }
+  static constexpr bool compare(const mapped_type val1, const mapped_type val2) { return val1 == val2; }
 };
 
 template <typename Symbol>
@@ -175,12 +340,13 @@ constexpr std::uint32_t elf_hash_(const std::uint8_t* name) {
   return h;
 }
 
+template <typename T>
 class sysv_hash {
  public:
   using key_type              = char*;
-  using mapped_type           = Elf64_Sym;
+  using mapped_type           = T;
   using value_type            = std::uint32_t;
-  using size_type             = std::uint64_t;
+  using size_type             = std::size_t;
   using pointer               = value_type*;
 
   using chain_iterator        = value_type*;
@@ -203,6 +369,8 @@ class sysv_hash {
     }
   }
 
+  sysv_const_chain_iterator begin(size_type n) { return {first_, bucket_, n}; }
+
  private:
   using bucket_iterator = pointer;
 
@@ -222,7 +390,7 @@ class symbols {
   using mapped_type           = T;
   using value_type            = std::pair<const Key, T>;
   using size_type             = std::uint64_t;
-  using difference_type       = std::int64_t;
+  using difference_type       = std::ptrdiff_t;
 
   using iterator              = mapped_type*;
   using const_iterator        = const iterator;
