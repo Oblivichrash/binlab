@@ -25,12 +25,10 @@ class Accessor : segments<T> {
 
   // element access
   constexpr reference operator[](size_type vaddr) {
-    return base_[virtual_offset_to_file_offset(this->begin(), this->end(),
-                                               vaddr)];
+    return base_[virtual_offset_to_file_offset(this->begin(), this->end(), vaddr)];
   }
   constexpr const_reference operator[](size_type vaddr) const {
-    return base_[virtual_offset_to_file_offset(this->begin(), this->end(),
-                                               vaddr)];
+    return base_[virtual_offset_to_file_offset(this->begin(), this->end(), vaddr)];
   }
 
  private:

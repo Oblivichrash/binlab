@@ -10,265 +10,10 @@
 #include <utility>
 
 #include "binlab/BinaryFormat/ELF.h"
+#include "bin_iterator.h"
 
 namespace binlab {
 namespace ELF {
-
-template <typename Derived, typename Value, typename Category,
-          typename Reference = Value&, typename Distance = std::ptrdiff_t>
-class IteratorFacade {
- public:
-  using value_type = typename std::remove_const<Value>::type;
-  using reference = Reference;
-  using pointer = Value*;
-  using difference_type = Distance;
-  using iterator_category = Category;
-
-  Derived& asDerived() { return *static_cast<Derived*>(this); }
-  Derived const& asDerived() const {
-    return *static_cast<Derived const*>(this);
-  }
-
-  reference operator*() const { return asDerived().dereference(); }
-  Derived& operator++() {
-    asDerived().increment();
-    return asDerived();
-  }
-  Derived operator++(int) {
-    Derived result(asDerived());
-    asDerived().increment();
-    return result;
-  }
-  friend bool operator==(IteratorFacade const& lhs, IteratorFacade const& rhs) {
-    return lhs.asDerived().equals(rhs.asDerived());
-  }
-};
-
-template <typename T>
-class ListNode {
- public:
-  T value;
-  ListNode<T>* next = nullptr;
-  ~ListNode() { delete next; }
-};
-
-class IteratorFacadeAccess {
-  // only IteratorFacade can use these definitions
-  template <typename Derived, typename Value, typename Category,
-            typename Reference, typename Distance>
-  friend class IteratorFacade;
-  // required of all iterators:
-  template <typename Reference, typename Iterator>
-  static Reference dereference(Iterator const& i) {
-    return i.dereference();
-  }
-  // required of bidirectional iterators:
-  template <typename Iterator>
-  static void decrement(Iterator& i) {
-    return i.decrement();
-  }
-  // required of random-access iterators:
-  template <typename Iterator, typename Distance>
-  static void advance(Iterator& i, Distance n) {
-    return i.advance(n);
-  }
-};
-
-template <typename T>
-class ListNodeIterator
-    : public IteratorFacade<ListNodeIterator<T>, T, std::forward_iterator_tag> {
-  ListNode<T>* current = nullptr;
-
- private:
-  T& dereference() const { return current->value; }
-  void increment() { current = current->next; }
-  bool equals(ListNodeIterator const& other) const {
-    return current == other.current;
-  }
-  ListNodeIterator(ListNode<T>* current = nullptr) : current(current) {}
-
-  friend class IteratorFacadeAccess;
-};
-
-template <typename Derived, typename T, typename Category>
-class bucket_const_iterator_facade {
- public:
-  using iterator_category = Category;
-
-  using value_type      = T;
-  using size_type       = std::size_t;
-  using difference_type = std::ptrdiff_t;
-  using pointer         = const value_type*;
-  using reference       = const value_type&;
-
-  using bucket_type     = std::uint32_t;
-  using bucket_pointer  = const bucket_type*;
-
-  reference operator*() const { return derived().dereference(); }
-  Derived& operator++() {
-    derived().increment();
-    return asDerived();
-  }
-  Derived operator++(int) {
-    Derived result(derived());
-    derived().increment();
-    return result;
-  }
-  friend bool operator==(bucket_const_iterator_facade& lhs, bucket_const_iterator_facade& rhs) {
-    return lhs.derived().equals(rhs.derived());
-  }
-
- private:
-  Derived& derived() noexcept { return *static_cast<Derived*>(this); }
-  Derived const& derived() const noexcept { return *static_cast<Derived const*>(this); }
-};
-
-template <typename T>
-class my_sysv_const_iterator
-    : public bucket_const_iterator_facade<my_sysv_const_iterator<T>, T, std::forward_iterator_tag> {
- public:
-  T& dereference() const noexcept { return *ptr_; }
-  void increment() noexcept { ptr_ = &chain_[bucket_[*ptr_]]; }
-  bool equals(const my_sysv_const_iterator& rhs) const noexcept { return ptr_ == rhs.ptr_; }
-
- protected:
-  bucket_pointer bucket_;
-
-  pointer chain_;
-  pointer ptr_;
-};
-
-template <typename T>
-class bucket_const_iterator {
- public:
-  using iterator_category = std::forward_iterator_tag;
-
-  using value_type      = T;
-  using size_type       = std::size_t;
-  using difference_type = std::ptrdiff_t;
-  using pointer         = const value_type*;
-  using reference       = const value_type&;
-
-  using bucket_type     = std::uint32_t;
-  using bucket_pointer  = const bucket_type*;
-
-  bucket_const_iterator(pointer chain, bucket_pointer bucket, size_type n)
-      : chain_{chain}, bucket_{bucket}, ptr_{&chain[bucket[n]]} {}
-
-  reference operator*() const noexcept { return *ptr_; }
-  pointer operator->() const noexcept { return std::pointer_traits<pointer>::pointer_to(**this); }
-
-  bool operator==(const bucket_const_iterator& rhs) const noexcept { return ptr_ == rhs.ptr_; }
-  bool operator!=(const bucket_const_iterator& rhs) const noexcept { return !(*this == rhs); }
-
-  difference_type position() const noexcept { return std::distance(chain_, ptr_); }
-
- protected:
-  bucket_pointer bucket_;
-
-  pointer chain_;
-  pointer ptr_;
-};
-
-template <typename T>
-class sysv_const_iterator : public bucket_const_iterator<T> {
- public:
-  sysv_const_iterator(pointer chain, bucket_pointer bucket, size_type n)
-      : base{chain, bucket, n} {}
-
-  sysv_const_iterator& operator++() noexcept {
-    ptr_ = &chain_[bucket_[*ptr_]];
-    return *this;
-  }
-
-  sysv_const_iterator operator++(int) noexcept {
-    sysv_const_iterator tmp = *this;
-    ptr_ = &chain_[bucket_[*ptr_]];
-    return tmp;
-  }
-
-  explicit operator bool() const noexcept { return **this; }
-
- private:
-  using base            = bucket_const_iterator<T>;
-};
-
-template <typename T>
-class sysv_iterator : public sysv_const_iterator<T> {
- public:
-  using pointer         = value_type*;
-  using reference       = value_type&;
-
-  sysv_iterator(pointer chain, bucket_pointer bucket, size_type n)
-      : base{chain, bucket, n} {}
-
-  reference operator*() const noexcept { return const_cast<reference>(base::operator*()); }
-  pointer operator->() const noexcept { return std::pointer_traits<pointer>::pointer_to(**this); }
-
-  sysv_iterator& operator++() noexcept {
-    base::operator++();
-    return *this;
-  }
-
-  sysv_iterator operator++(int) noexcept {
-    sysv_iterator tmp = *this;
-    base::operator++();
-    return tmp;
-  }
-
- private:
-  using base            = sysv_const_iterator<T>;
-};
-
-template <typename T>
-class gnu_const_iterator : public bucket_const_iterator<T> {
- public:
-  gnu_const_iterator(pointer chain, bucket_pointer bucket, size_type n)
-      : base{chain, bucket, n} {}
-
-  gnu_const_iterator& operator++() noexcept {
-    ++ptr_;
-    return *this;
-  }
-
-  gnu_const_iterator operator++(int) noexcept {
-    gnu_const_iterator tmp = *this;
-    ++ptr_;
-    return tmp;
-  }
-
-  explicit operator bool() const noexcept { return !(**this | 1); }
-
- private:
-  using base            = bucket_const_iterator<T>;
-};
-
-template <typename T>
-class gnu_iterator : public gnu_const_iterator<T> {
- public:
-  using pointer         = value_type*;
-  using reference       = value_type&;
-
-  gnu_iterator(pointer chain, bucket_pointer bucket, size_type n)
-      : base{chain, bucket, n} {}
-
-  reference operator*() const noexcept { return const_cast<reference>(base::operator*()); }
-  pointer operator->() const noexcept { return std::pointer_traits<pointer>::pointer_to(**this); }
-
-  gnu_iterator& operator++() noexcept {
-    base::operator++();
-    return *this;
-  }
-
-  gnu_iterator operator++(int) noexcept {
-    gnu_iterator tmp = *this;
-    base::operator++();
-    return tmp;
-  }
-
- private:
-  using base            = gnu_const_iterator<T>;
-};
 
 template <typename T>
 struct bloom_traits;
@@ -325,6 +70,119 @@ class bloom_filter {
 };
 
 template <typename Key, typename T>
+class gnu_table {
+ public:
+  using key_type              = Key;
+  using mapped_type           = T;
+  using size_type             = std::size_t;
+  using difference_type       = std::ptrdiff_t;
+
+  using hash_table            = std::uint32_t*;
+  using bucket_type           = std::uint32_t;
+  using bucket_pointer        = const bucket_type*;
+  using chain_type            = std::uint32_t;
+  using chain_pointer         = const bucket_type*;
+
+  using bloom_type            = typename bloom_traits<T>::value_type;
+  using bloom_pointer         = const bloom_type*;
+
+  gnu_table(hash_table table) : hash_{table} {
+    bloom_ = reinterpret_cast<bloom_pointer>(&hash_[4]);
+    bucket_ = reinterpret_cast<bucket_pointer>(&bloom_[bloom_count()]);
+    chain_ = reinterpret_cast<chain_pointer>(&bucket_[bucket_count()]);
+
+    chain_size_ = std::distance(chain_, chain_end(chain_, bucket_, bucket_count()));
+  }
+
+  constexpr size_type bucket_count() const noexcept { return hash_[0]; }
+  constexpr difference_type symbol_offset() const noexcept { return hash_[1]; }
+  constexpr size_type bloom_count(hash_table table) const noexcept { return hash_[2]; }
+  constexpr size_type bloom_shift(hash_table table) const noexcept { return hash_[3]; }
+
+  constexpr bloom_pointer bloom() const noexcept { return bloom_; }
+  constexpr bucket_pointer bucket() const noexcept { return bucket_; }
+  constexpr chain_pointer chain() const noexcept { return chain_; }
+
+  constexpr size_type chain_count() const noexcept { return chain_size_; }
+
+  static constexpr std::uint32_t hash_value(const Key k) {
+    auto name = reinterpret_cast<std::uint32_t>(k);
+    std::uint32_t h = 5381;
+    for (; *name; name++) {
+      h = (h << 5) + h + *name;
+    }
+    return h;
+  }
+
+ private:
+  static constexpr chain_pointer chain_end(chain_pointer chain, bucket_pointer bucket, size_type bucket_size) noexcept {
+    auto first = bucket, last = bucket + bucket_size;
+    while (--last != first) {
+      if (*last) {  // find last non-empty bucket.
+        break;
+      }
+    }
+
+    auto iter = chain + *last;
+    while (!(*iter++ & 1))
+      ;
+    return iter;
+  }
+
+  hash_table hash_;
+
+  bloom_pointer bloom_;
+  bucket_pointer bucket_;
+  chain_pointer chain_;
+  size_type chain_size_;
+};
+
+template <typename Key, typename T>
+class sysv_table {
+ public:
+  using key_type              = Key;
+  using mapped_type           = T;
+  using size_type             = std::size_t;
+  using difference_type       = std::ptrdiff_t;
+
+  using hash_table            = std::uint32_t*;
+  using bucket_type           = std::uint32_t;
+  using bucket_pointer        = const bucket_type*;
+  using chain_type            = std::uint32_t;
+  using chain_pointer         = const bucket_type*;
+
+  sysv_table(hash_table table) : hash_{table} {
+    bucket_ = reinterpret_cast<bucket_pointer>(&hash_[2]);
+    chain_ = reinterpret_cast<chain_pointer>(&bucket_[bucket_count()]);
+  }
+
+  constexpr size_type bucket_count() const noexcept { return hash_[0]; }
+  constexpr size_type chain_count() const noexcept { return hash_[1]; }
+
+  constexpr bucket_pointer bucket() const noexcept { return bucket_; }
+  constexpr chain_pointer chain() const noexcept { return chain_; }
+
+  static constexpr std::uint32_t hash_value(const Key k) {
+    auto name = reinterpret_cast<std::uint32_t>(k);
+    std::uint32_t h = 0, g = 0;
+    for (; *name; name++) {
+      h = (h << 4) + *name;
+      if (g = h & 0xf0000000) {
+        h ^= g >> 24;
+      }
+      h &= ~g;
+    }
+    return h;
+  }
+
+ private:
+  hash_table hash_;
+
+  bucket_pointer bucket_;
+  chain_pointer chain_;
+};
+
+template <typename Key, typename T>
 struct hash_traits {
   using key_type              = char*;
   using mapped_type           = T;
@@ -345,84 +203,6 @@ struct hash_traits {
   using chain_pointer         = const bucket_type*;
 
   static constexpr bool compare(const Key val1, const Key val2) { return !std::strcmp(val1, val2); }
-
-  static constexpr size_type bucket_count(hash_table table) noexcept { return table[0]; }
-
-  static constexpr chain_pointer chain(bucket_pointer bucket, size_type size) {
-    return reinterpret_cast<chain_pointer>(&bucket[size]);
-  }
-};
-
-template <typename Key, typename T>
-struct gnu_traits : hash_traits<Key, T> {
-  using local_iterator        = gnu_iterator<std::uint32_t>;
-  using local_const_iterator  = gnu_const_iterator<std::uint32_t>;
-
-  using bloom_type            = typename bloom_traits<T>::value_type;
-  using bloom_iterator        = typename bloom_filter<bloom_type>::bloom_iterator;
-
-  static constexpr std::uint32_t hash_value(const Key k) {
-    auto name = reinterpret_cast<std::uint32_t>(k);
-    std::uint32_t h = 5381;
-    for (; *name; name++) {
-      h = (h << 5) + h + *name;
-    }
-    return h;
-  }
-
-  static constexpr size_type bucket_count(hash_table table) noexcept { return table[0]; }
-  static constexpr size_type symbol_offset(hash_table table) noexcept { return table[1]; }
-  static constexpr size_type bloom_size(hash_table table) noexcept { return table[2]; }
-  static constexpr size_type bloom_shift(hash_table table) noexcept { return table[3]; }
-
-  static constexpr bloom_iterator bloom(hash_table table) noexcept {
-    return reinterpret_cast<bloom_iterator>(&table[4]);
-  }
-  static constexpr bucket_pointer bucket(bloom_iterator bloom, size_type size) noexcept {
-    return reinterpret_cast<bucket_pointer>(bloom + size);
-  }
-  static constexpr chain_pointer chain(bucket_pointer bucket, size_type size) noexcept {
-    return reinterpret_cast<chain_pointer>(bucket + size);
-  }
-
-  static constexpr chain_pointer chain_end(bucket_pointer bucket, size_type size, chain_pointer chain) {
-    auto first = bucket, last = bucket + size;
-
-    while (--last != first) {
-      if (*last) {  // find last non-empty bucket.
-        break;
-      }
-    }
-
-    auto iter = chain + *last;
-    while (!(*iter++ & 1))
-      ;
-    return iter;
-  }
-};
-
-template <typename Key, typename T>
-struct sysv_traits : hash_traits<Key, T> {
-  using local_iterator        = sysv_iterator<std::uint32_t>;
-  using local_const_iterator  = sysv_const_iterator<std::uint32_t>;
-
-  static constexpr std::uint32_t hash_value(const Key k) {
-    auto name = reinterpret_cast<std::uint32_t>(k);
-    std::uint32_t h = 0, g = 0;
-    for (; *name; name++) {
-      h = (h << 4) + *name;
-      if (g = h & 0xf0000000) {
-        h ^= g >> 24;
-      }
-      h &= ~g;
-    }
-    return h;
-  }
-
-  static constexpr size_type chain_count(hash_table table) noexcept { return table[1]; }
-
-  static constexpr bucket_pointer bucket(hash_table table) noexcept { return &table[2]; }
-  static constexpr chain_pointer chain(bucket_pointer bucket, size_type size) noexcept { return &bucket[size]; }
 };
 
 template <typename Traits>
@@ -434,7 +214,7 @@ class hash {
   using size_type             = typename Traits::size_type;
 
   using local_iterator        = typename Traits::local_iterator;
-  using local_const_iterator  = typename Traits::local_const_iterator;
+  using const_local_iterator  = typename Traits::local_const_iterator;
 
   using hash_table            = typename Traits::hash_table;
   using bucket_type           = typename Traits::bucket_type;
@@ -447,12 +227,11 @@ class hash {
 
   // bucket interface
   constexpr local_iterator begin(size_type n) noexcept { return {chain_, bucket_, n}; }
-  constexpr local_const_iterator begin(size_type n) const noexcept { return {chain_, bucket_, n}; }
+  constexpr const_local_iterator begin(size_type n) const noexcept { return {chain_, bucket_, n}; }
   constexpr size_type bucket_count() const noexcept { return Traits::bucket_count(hash_); }
 
  private:
   hash_table hash_;
-
   bucket_pointer bucket_;
   chain_pointer chain_;
 };
