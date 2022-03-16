@@ -107,33 +107,48 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
     }
   }
 
-  if (strtab == nullptr || symtab == nullptr || gnu_hash == nullptr) {
+  if (strtab == nullptr || symtab == nullptr) {
     std::cerr << "missing needed symbol info\n";
     return;
   }
 
   std::cout << std::hex;
 
-  sysv_hash hash{strtab, symtab, elf_hash};
-  auto hhhh = elf_hash_(reinterpret_cast<const std::uint8_t*>("Bit_ReleaseFeature"));
-  for (auto iter = hash.begin(hhhh % hash.bucket_count()); *iter; ++iter) {
-    auto name = &strtab[symtab[iter.position()].st_name];
-    std::cout << *iter << ", hash: " << elf_hash_(reinterpret_cast<std::uint8_t*>(name)) << " " << &strtab[symtab[*iter].st_name] << '\n';
-  }
+  if (elf_hash) {
+    sysv_hash_table table{symtab, strtab, elf_hash};
 
-  symbols symbol{strtab, symtab, static_cast<void*>(gnu_hash)};
+    for (const auto& s : table) {
+      std::cout << &strtab[s.st_name] << '\n';
+    }
+    std::cout << '\n';
 
-  std::size_t counter = 0;
-  for (const auto& s : symbol) {
-    auto name = &strtab[s.st_name];
-    auto iter = symbol.find(name);
-    if (iter != symbol.end()) {
-      ++counter;
-      std::cout << std::dec << std::setw(4) << counter << ": " << name << '\n';
+    for (size_t i = 0; i < table.bucket_count(); i++) {
+      std::cout << "bucket: " << i << '\n';
+      for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
+        std::cout << &strtab[iter->st_name] << '\n';
+      }
+      std::cout << '\n';
     }
   }
-  std::cout << "found " << counter << " symbols!\n";
-  std::cout << "symbol table size: " << symbol.size() << '\n';
+
+  if (gnu_hash) {
+    gun_hash_table table{symtab, strtab, gnu_hash};
+
+    std::size_t count = 0;
+    for (const auto& s : table) {
+      std::cout << count << ": " << &strtab[s.st_name] << '\n';
+      ++count;
+    }
+    std::cout << '\n';
+
+    for (size_t i = 0; i < table.bucket_count(); i++) {
+      std::cout << "bucket: " << i << '\n';
+      for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
+        std::cout << &strtab[iter->st_name] << '\n';
+      }
+      std::cout << '\n';
+    }
+  }
 }
 
 void Dump64LE(std::vector<char>& buff) {
