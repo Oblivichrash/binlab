@@ -144,7 +144,7 @@ void Dump32(const accessor& base, const IMAGE_IMPORT_DESCRIPTOR* descriptor) {
   std::cout << '\n';
 }
 
-void Dump32(const accessor& base, const IMAGE_BASE_RELOCATION* relocation) {
+void Dump32(const IMAGE_BASE_RELOCATION* relocation) {
   for (auto* iter = reinterpret_cast<const char*>(relocation);; iter += relocation->SizeOfBlock) {
     relocation = reinterpret_cast<const IMAGE_BASE_RELOCATION*>(iter);
     if (relocation->SizeOfBlock == 0 || relocation->VirtualAddress == 0) {
@@ -165,7 +165,7 @@ void Dump32(const accessor& base, const IMAGE_BASE_RELOCATION* relocation) {
   std::cout << '\n';
 }
 
-void Dump64(const accessor& base, const IMAGE_BASE_RELOCATION* relocation) {
+void Dump64(const IMAGE_BASE_RELOCATION* relocation) {
   for (auto* iter = reinterpret_cast<const char*>(relocation);; iter += relocation->SizeOfBlock) {
     relocation = reinterpret_cast<const IMAGE_BASE_RELOCATION*>(iter);
     if (relocation->SizeOfBlock == 0 || relocation->VirtualAddress == 0) {
@@ -205,7 +205,7 @@ void DumpNt(const accessor& base, const IMAGE_NT_HEADERS32& nt) {
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump base relocation\n";
-    Dump32(base, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
+    Dump32(reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
   }
 }
 
@@ -228,7 +228,7 @@ void DumpNt(const accessor& base, const IMAGE_NT_HEADERS64& nt) {
   directory = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
   if (directory->VirtualAddress != 0 && directory->Size != 0) {
     std::cout << "dump base relocation\n";
-    Dump64(base, reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
+    Dump64(reinterpret_cast<const IMAGE_BASE_RELOCATION*>(&base[directory->VirtualAddress]));
   }
 }
 

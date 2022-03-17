@@ -67,10 +67,40 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<char*, T*>& sy
   return os;
 }
 
+template <typename T>
+class dynamic {
+ public:
+  using value_type            = T;
+  using size_type             = std::uint64_t;
+  using difference_type       = std::ptrdiff_t;
+  using iterator              = T*;
+  using const_iterator        = const T*;
+
+  dynamic(iterator first) : first_{first}, last_{dynamic_end(first)} {}
+  dynamic(iterator first, iterator last) : dynamic{first, last} {}
+
+  // iterators
+  constexpr iterator begin() noexcept { return first_; }
+  constexpr const_iterator begin() const noexcept { return first_; }
+  constexpr iterator end() noexcept { return last_; }
+  constexpr const_iterator end() const noexcept { return last_; }
+
+  // capacity
+  constexpr size_type size() const noexcept { return std::distance(first_, last_); }
+
+ private:
+  static constexpr iterator dynamic_end(iterator first) noexcept {
+    while (first++ != DT_NULL)
+      ;
+    return first;
+  }
+
+  iterator first_;
+  iterator last_;
+};
+
 template <typename Elf_Phdr, typename Elf_Dyn>
 void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
-  using Traits = dyn_traits<Elf_Dyn>;
-
   using Elf_Sym = typename dyn_traits<Elf_Dyn>::Elf_Sym;
 
   char* strtab{};
@@ -80,12 +110,18 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   std::size_t syment;
 
   std::uint32_t* gnu_hash{};
-  std::uint32_t* elf_hash{};
+  std::uint32_t* hash{};
+
+  std::vector<std::uint64_t> needed;
+  std::uint64_t soname = 0;
 
   for (; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
+      case DT_NEEDED:
+        needed.push_back(dyn->d_un.d_val);
+        break;
       case DT_HASH:
-        elf_hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
+        hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
         break;
       case DT_STRTAB:
         strtab = reinterpret_cast<char*>(&base[dyn->d_un.d_ptr]);
@@ -98,6 +134,9 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
         break;
       case DT_SYMENT:
         syment = dyn->d_un.d_val;
+        break;
+      case DT_SONAME:
+        soname = dyn->d_un.d_val;
         break;
       case DT_GNU_HASH:
         gnu_hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
@@ -114,18 +153,25 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
 
   std::cout << std::hex;
 
-  if (elf_hash) {
-    sysv_hash_table table{symtab, strtab, elf_hash};
+  std::cout << "strsz: " << strsz << '\n';
+  std::cout << "syment: " << syment << '\n';
 
-    for (const auto& s : table) {
-      std::cout << &strtab[s.st_name] << '\n';
+  if (!needed.empty()) {
+    std::cout << "needed: ";
+    for (const auto v : needed) {
+      std::cout << &strtab[v] << ' ';
     }
     std::cout << '\n';
+  }
 
+  std::cout << "soname: " << &strtab[soname] << '\n';
+
+  if (hash) {
+    sysv_hash_table table{symtab, strtab, hash};
     for (size_t i = 0; i < table.bucket_count(); i++) {
-      std::cout << "bucket: " << i << '\n';
       for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
-        std::cout << &strtab[iter->st_name] << '\n';
+        auto name = &strtab[iter->st_name];
+        std::cout << std::setw(4) << i << std::setw(9) << table.hash_value(name) << ' ' << name << '\n';
       }
       std::cout << '\n';
     }
@@ -133,18 +179,10 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
 
   if (gnu_hash) {
     gun_hash_table table{symtab, strtab, gnu_hash};
-
-    std::size_t count = 0;
-    for (const auto& s : table) {
-      std::cout << count << ": " << &strtab[s.st_name] << '\n';
-      ++count;
-    }
-    std::cout << '\n';
-
     for (size_t i = 0; i < table.bucket_count(); i++) {
-      std::cout << "bucket: " << i << '\n';
       for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
-        std::cout << &strtab[iter->st_name] << '\n';
+        auto name = &strtab[iter->st_name];
+        std::cout << std::setw(4) << i << std::setw(9) << table.hash_value(name) << ' ' << name << '\n';
       }
       std::cout << '\n';
     }

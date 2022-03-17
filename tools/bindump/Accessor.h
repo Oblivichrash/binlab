@@ -12,7 +12,7 @@ class Accessor : segments<T> {
  public:
   using size_type         = typename traits::segment_traits<T>::size_type;
   using reference         = char&;
-  using const_reference   = const reference;
+  using const_reference   = const char&;
   using const_iterator    = typename traits::segment_traits<T>::const_iterator;
   using address_type      = typename traits::segment_traits<T>::address_type;
 

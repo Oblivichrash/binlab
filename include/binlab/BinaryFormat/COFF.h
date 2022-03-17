@@ -556,7 +556,7 @@ struct IMAGE_DELAYLOAD_DESCRIPTOR {
     struct {
       DWORD RvaBased : 1;                 // Delay load version 2
       DWORD ReservedAttributes : 31;
-    };
+    } u;
   } Attributes;
 
   DWORD DllNameRVA;                       // RVA to the name of the target library (NULL-terminate ASCII string)

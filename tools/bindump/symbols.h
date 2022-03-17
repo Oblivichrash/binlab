@@ -48,22 +48,29 @@ class const_sysv_bucket_iterator {
     return tmp;
   }
 
-  bool operator==(const const_sysv_bucket_iterator& rhs) const noexcept { return index_ == rhs.index_; }
+  bool operator==(const const_sysv_bucket_iterator& rhs) const noexcept { return &symtab_[index_] == &rhs.symtab_[rhs.index_]; }
   bool operator!=(const const_sysv_bucket_iterator& rhs) const noexcept { return !(*this == rhs); }
   //explicit operator bool() const noexcept { return index_ != STN_UNDEF; }
 
  private:
-  difference_type index_;
-
-  chain_pointer chain_;
   iterator symtab_;
+  chain_pointer chain_;
+  difference_type index_;
 };
 
 template <typename T>
 class sysv_bucket_iterator : public const_sysv_bucket_iterator<T> {
+ private:
+  using base                = const_sysv_bucket_iterator<T>;
+
  public:
-  using pointer         = value_type*;
-  using reference       = value_type&;
+  using size_type           = typename base::size_type;
+  using difference_type     = typename base::difference_type;
+  using pointer             = std::remove_const_t<typename base::pointer>;
+  using reference           = std::remove_const_t<typename base::reference>;
+  using iterator            = std::remove_const_t<typename base::iterator>;
+
+  using chain_pointer       = std::remove_const_t<typename base::chain_pointer>;
 
   sysv_bucket_iterator(iterator symtab, chain_pointer chain, difference_type i)
       : base{symtab, chain, i} {}
@@ -81,9 +88,6 @@ class sysv_bucket_iterator : public const_sysv_bucket_iterator<T> {
     base::operator++();
     return tmp;
   }
-
- private:
-  using base            = const_sysv_bucket_iterator<T>;
 };
 
 template <typename T>
@@ -96,7 +100,7 @@ class sysv_hash_table {
   using difference_type       = std::ptrdiff_t;
 
   using iterator              = mapped_type*;
-  using const_iterator        = const iterator;
+  using const_iterator        = const mapped_type*;
 
   using local_iterator        = sysv_bucket_iterator<T>;
   using const_local_iterator  = const_sysv_bucket_iterator<T>;
@@ -135,8 +139,8 @@ class sysv_hash_table {
   constexpr size_type bucket(const char* k) const noexcept { return hash_value(k) % bucket_count(); }
   constexpr local_iterator begin(size_type n) noexcept { return {first_, chain_, bucket_[n]}; }
   constexpr const_local_iterator begin(size_type n) const noexcept { return {first_, chain_, bucket_[n]}; }
-  constexpr local_iterator end(size_type n) noexcept { return {first_, chain_, STN_UNDEF}; }
-  constexpr const_local_iterator end(size_type n) const noexcept { return {first_, chain_, STN_UNDEF}; }
+  constexpr local_iterator end(size_type) noexcept { return {first_, chain_, STN_UNDEF}; }
+  constexpr const_local_iterator end(size_type) const noexcept { return {first_, chain_, STN_UNDEF}; }
 
   // hash
   constexpr result_type hash_value(const char* k) const noexcept {
@@ -144,7 +148,8 @@ class sysv_hash_table {
     std::uint32_t h = 0, g = 0;
     for (; *name; name++) {
       h = (h << 4) + *name;
-      if (g = h & 0xf0000000) {
+      g = h & 0xf0000000;
+      if (g) {
         h ^= g >> 24;
       }
       h &= ~g;
@@ -188,10 +193,10 @@ class gun_hash_table {
   using difference_type       = std::ptrdiff_t;
 
   using iterator              = mapped_type*;
-  using const_iterator        = const iterator;
+  using const_iterator        = const mapped_type*;
 
-  using local_iterator        = iterator;
-  using const_local_iterator  = const local_iterator;
+  using local_iterator        = mapped_type*;
+  using const_local_iterator  = const mapped_type*;
 
   // hash
   using argument_type         = key_type;

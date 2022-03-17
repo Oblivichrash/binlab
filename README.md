@@ -1,8 +1,12 @@
 # binlab
 
-Executable Binary Laboratory
+binlab (Binary Laboratory) is a project for learning binaries.
 
-## Building and Testing binlab
+Binary usually referred to as executable file in computing, which encode machine code instructions and can be interpreted by a physical CPU directly. Binaries are system specific (such as Executable and Linkable Format (ELF) for Linux and Portable Executable (PE) for Windows), it is a mirror of the operating system in many ways.
+
+Feel free to make your contributions to this project.
+
+## Building and Testing
 
 ### Generating a Buildsystem:
 
