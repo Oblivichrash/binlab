@@ -45,11 +45,13 @@ struct dyn_traits;
 template <>
 struct dyn_traits<Elf64_Dyn> {
   using Elf_Sym = Elf64_Sym;
+  using Elf_XWord = Elf64_Xword;
 };
 
 template <>
 struct dyn_traits<Elf32_Dyn> {
   using Elf_Sym = Elf32_Sym;
+  using Elf_XWord = Elf32_Word;
 };
 
 template <typename T>
@@ -102,6 +104,7 @@ class dynamic {
 template <typename Elf_Phdr, typename Elf_Dyn>
 void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   using Elf_Sym = typename dyn_traits<Elf_Dyn>::Elf_Sym;
+  using Elf_XWord = typename dyn_traits<Elf_Dyn>::Elf_XWord;
 
   char* strtab{};
   std::size_t strsz;
@@ -112,13 +115,13 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   std::uint32_t* gnu_hash{};
   std::uint32_t* hash{};
 
-  std::vector<std::uint64_t> needed;
-  std::uint64_t soname = 0;
+  std::vector<Elf_XWord> needed;
+  Elf_XWord soname = 0;
 
   for (; dyn->d_tag != DT_NULL; ++dyn) {
     switch (dyn->d_tag) {
       case DT_NEEDED:
-        needed.push_back(dyn->d_un.d_val);
+        needed.push_back(dyn->d_un.d_val);  // insert value by reference
         break;
       case DT_HASH:
         hash = reinterpret_cast<std::uint32_t*>(&base[dyn->d_un.d_ptr]);
@@ -175,6 +178,14 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
       }
       std::cout << '\n';
     }
+
+    auto name = "register_printf_function";
+    auto iter = table.find(name);
+    if (iter != table.end()) {
+      std::cout << name << " found\n";
+    } else {
+      std::cout << name << " not found!\n";
+    }
   }
 
   if (gnu_hash) {
@@ -185,6 +196,14 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
         std::cout << std::setw(4) << i << std::setw(9) << table.hash_value(name) << ' ' << name << '\n';
       }
       std::cout << '\n';
+    }
+
+    auto name = "_ZNSt16__numpunct_cacheIcED1Ev";
+    auto iter = table.find(name);
+    if (iter != table.end()) {
+      std::cout << name << " found\n";
+    } else {
+      std::cout << name << " not found!\n";
     }
   }
 }

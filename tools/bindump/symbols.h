@@ -134,6 +134,18 @@ class sysv_hash_table {
   // capacity
   constexpr size_type size() const noexcept { return std::distance(first_, last_); }
 
+  
+  // set operations
+  constexpr const_iterator find(const char* k) const noexcept {
+    auto n = hash_value(k) % bucket_count();
+    for (auto iter = begin(n); iter != end(n); ++iter) {
+      if (!std::strcmp(k, &strtab_[iter->st_name])) {
+        return std::pointer_traits<const_iterator>::pointer_to(*iter);
+      }
+    }
+    return last_;
+  }
+
   // bucket interface
   constexpr size_type bucket_count() const noexcept { return hash_[0]; }
   constexpr size_type bucket(const char* k) const noexcept { return hash_value(k) % bucket_count(); }
@@ -232,6 +244,23 @@ class gun_hash_table {
   // capacity
   constexpr size_type size() const noexcept { return std::distance(first_, last_); }
 
+  // set operations
+  constexpr const_iterator find(const char* k) const noexcept {
+    auto hash = hash_value(k);
+    if (filter(hash)) {
+      auto n = hash % bucket_count();
+      if (bucket_[n] >= symbol_offset()) {
+        auto chain = chain_ + bucket_[n] - symbol_offset();
+        for (auto iter = begin(n); iter != end(n); ++iter, ++chain) {
+          if ((hash | 1) == (*chain | 1) && !std::strcmp(k, &strtab_[iter->st_name])) {
+            return iter;
+          }
+        }
+      }
+    }
+    return last_;
+  }
+
   // bucket interface
   constexpr size_type bucket_count() const noexcept { return hash_[0]; }
   constexpr size_type bucket(const char* k) const noexcept {
@@ -286,12 +315,12 @@ class gun_hash_table {
   // bloom
   static constexpr size_type bits = sizeof(bloom_type) * 8;
 
-  difference_type hash1(result_type hash) const noexcept { return hash % bits; }
-  difference_type hash2(result_type hash) const noexcept { return (hash >> bloom_shift()) % bits; }
+  difference_type bloom_hash1(result_type hash) const noexcept { return hash % bits; }
+  difference_type bloom_hash2(result_type hash) const noexcept { return (hash >> bloom_shift()) % bits; }
 
   constexpr bool filter(result_type hash) const noexcept {
     bloom_type bloom = bloom_[(hash / bits) % bloom_count()];
-    bloom_type mask = 0 | bloom_type{1} << hash1(hash) | bloom_type{1} << hash2(hash);
+    bloom_type mask = 0 | bloom_type{1} << bloom_hash1(hash) | bloom_type{1} << bloom_hash2(hash);
     return (bloom & mask) == mask;
   }
 
