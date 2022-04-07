@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <vector>
 
 #include "elfdump.h"
 #include "segments.h"
@@ -68,38 +69,6 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<char*, T*>& sy
   os << std::setw(16) << "size: " << std::showbase << s.st_size;
   return os;
 }
-
-template <typename T>
-class dynamic {
- public:
-  using value_type            = T;
-  using size_type             = std::uint64_t;
-  using difference_type       = std::ptrdiff_t;
-  using iterator              = T*;
-  using const_iterator        = const T*;
-
-  dynamic(iterator first) : first_{first}, last_{dynamic_end(first)} {}
-  dynamic(iterator first, iterator last) : dynamic{first, last} {}
-
-  // iterators
-  constexpr iterator begin() noexcept { return first_; }
-  constexpr const_iterator begin() const noexcept { return first_; }
-  constexpr iterator end() noexcept { return last_; }
-  constexpr const_iterator end() const noexcept { return last_; }
-
-  // capacity
-  constexpr size_type size() const noexcept { return std::distance(first_, last_); }
-
- private:
-  static constexpr iterator dynamic_end(iterator first) noexcept {
-    while (first++ != DT_NULL)
-      ;
-    return first;
-  }
-
-  iterator first_;
-  iterator last_;
-};
 
 template <typename Elf_Phdr, typename Elf_Dyn>
 void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
@@ -210,8 +179,14 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
 
 void Dump64LE(std::vector<char>& buff) {
   auto ehdr = reinterpret_cast<Elf64_Ehdr*>(&buff[0]);
-  auto phdr = reinterpret_cast<Elf64_Phdr*>(&buff[ehdr->e_phoff]);
+  auto shdr = reinterpret_cast<Elf64_Shdr*>(&buff[ehdr->e_shoff]);
 
+  char* shstrtab = &buff[shdr[ehdr->e_shstrndx].sh_offset];
+  for (std::size_t i = 0; i < ehdr->e_shnum; ++i) {
+    std::cout << &shstrtab[shdr[i].sh_name] << '\n';
+  }
+
+  auto phdr = reinterpret_cast<Elf64_Phdr*>(&buff[ehdr->e_phoff]);
   Accessor<Elf64_Phdr> base{&buff[0], phdr, ehdr->e_phnum};
   for (auto i = 0; i < ehdr->e_phnum; ++i) {
     switch (phdr[i].p_type) {
@@ -226,8 +201,14 @@ void Dump64LE(std::vector<char>& buff) {
 
 void Dump32LE(std::vector<char>& buff) {
   auto ehdr = reinterpret_cast<Elf32_Ehdr*>(&buff[0]);
-  auto phdr = reinterpret_cast<Elf32_Phdr*>(&buff[ehdr->e_phoff]);
+  auto shdr = reinterpret_cast<Elf32_Shdr*>(&buff[ehdr->e_shoff]);
 
+  char* shstrtab = &buff[shdr[ehdr->e_shstrndx].sh_offset];
+  for (std::size_t i = 0; i < ehdr->e_shnum; ++i) {
+    std::cout << &shstrtab[shdr[i].sh_name] << '\n';
+  }
+
+  auto phdr = reinterpret_cast<Elf32_Phdr*>(&buff[ehdr->e_phoff]);
   Accessor<Elf32_Phdr> base{&buff[0], phdr, ehdr->e_phnum};
   for (auto i = 0; i < ehdr->e_phnum; ++i) {
     switch (phdr[i].p_type) {

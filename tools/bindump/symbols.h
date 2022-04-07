@@ -133,7 +133,6 @@ class sysv_hash_table {
 
   // capacity
   constexpr size_type size() const noexcept { return std::distance(first_, last_); }
-
   
   // set operations
   constexpr const_iterator find(const char* k) const noexcept {
@@ -193,6 +192,66 @@ struct bloom_traits<Elf64_Sym> {
 template <>
 struct bloom_traits<Elf32_Sym> {
   using value_type = std::uint32_t;
+};
+
+//template <typename Key, typename T, typename Pred, typename Allocator>
+//struct symbol_traits {
+//  using key_type            = Key;
+//  using mapped_type         = T;
+//  //using value_type          = pair<const Key, T>;
+//  using key_compare         = Pred;
+//};
+//
+//class sysv_hash {
+// public:
+//  using argument_type         = char*;
+//  using result_type           = std::uint32_t;
+//
+//  result_type operator()(const argument_type key) const {
+//    auto name = reinterpret_cast<const std::uint8_t*>(key);
+//    result_type h = 0, g = 0;
+//    for (; *name; name++) {
+//      h = (h << 4) + *name;
+//      g = h & 0xf0000000;
+//      if (g) {
+//        h ^= g >> 24;
+//      }
+//      h &= ~g;
+//    }
+//    return h;
+//  }
+//};
+//
+//class gnu_hash {
+// public:
+//  using argument_type         = char*;
+//  using result_type           = std::uint32_t;
+//
+//  result_type operator()(const argument_type key) const {
+//    auto name = reinterpret_cast<const std::uint8_t*>(key);
+//    result_type h = 5381;
+//    for (; *name; name++) {
+//      h = (h << 5) + h + *name;
+//    }
+//    return h;
+//  }
+//};
+
+template <typename Traits>
+class gun_hash {
+ public:
+  using size_type             = std::uint32_t;
+  using bloom_type            = typename Traits::bloom_type;
+
+  gun_hash(void* hash) : hash_{hash} {}
+
+  constexpr size_type bucket_count() const noexcept { return hash_[0]; }
+  constexpr size_type symbol_offset() const noexcept { return hash_[1]; }
+  constexpr size_type bloom_count() const noexcept { return hash_[2]; }
+  constexpr size_type bloom_shift() const noexcept { return hash_[3]; }
+
+ private:
+  std::uint32_t* hash_;
 };
 
 template <typename T>
