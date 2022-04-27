@@ -237,11 +237,11 @@ struct bloom_traits<Elf32_Sym> {
 //  }
 //};
 
-template <typename Traits>
+template <typename EhdrTraits>
 class gun_hash {
  public:
   using size_type             = std::uint32_t;
-  using bloom_type            = typename Traits::bloom_type;
+  using bloom_type            = typename EhdrTraits::bloom_type;
 
   gun_hash(void* hash) : hash_{hash} {}
 

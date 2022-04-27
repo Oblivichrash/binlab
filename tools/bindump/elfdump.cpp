@@ -47,12 +47,16 @@ template <>
 struct dyn_traits<Elf64_Dyn> {
   using Elf_Sym = Elf64_Sym;
   using Elf_XWord = Elf64_Xword;
+
+  using symbol_iterator = Elf64_Sym*;
 };
 
 template <>
 struct dyn_traits<Elf32_Dyn> {
   using Elf_Sym = Elf32_Sym;
   using Elf_XWord = Elf32_Word;
+
+  using symbol_iterator = Elf32_Sym*;
 };
 
 template <typename T>
@@ -71,7 +75,7 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<char*, T*>& sy
 }
 
 template <typename Elf_Phdr, typename Elf_Dyn>
-void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
+void DumpDynamic(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   using Elf_Sym = typename dyn_traits<Elf_Dyn>::Elf_Sym;
   using Elf_XWord = typename dyn_traits<Elf_Dyn>::Elf_XWord;
 
@@ -177,72 +181,99 @@ void DumpSym(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   }
 }
 
-void Dump64LE(std::vector<char>& buff) {
-  auto ehdr = reinterpret_cast<Elf64_Ehdr*>(&buff[0]);
-  auto shdr = reinterpret_cast<Elf64_Shdr*>(&buff[ehdr->e_shoff]);
+template <typename T>
+struct ehdr_traits;
+
+template <>
+struct ehdr_traits<Elf64_Ehdr> {
+  using section_iterator = Elf64_Shdr*;
+  using segment_iterator = Elf64_Phdr*;
+};
+
+template <>
+struct ehdr_traits<Elf32_Ehdr> {
+  using section_iterator = Elf32_Shdr*;
+  using segment_iterator = Elf32_Phdr*;
+};
+
+template <typename T>
+struct phdr_traits;
+
+template <>
+struct phdr_traits<Elf64_Phdr> {
+  using dynamic_iterator = Elf64_Dyn*;
+};
+
+template <>
+struct phdr_traits<Elf32_Phdr> {
+  using dynamic_iterator = Elf32_Dyn*;
+};
+
+template <typename Ehdr, typename EhdrTraits = ehdr_traits<Ehdr>>
+int DumpHeader(std::vector<char>& buff, const Ehdr* ehdr) {
+  auto shdr = reinterpret_cast<typename EhdrTraits::section_iterator>(&buff[ehdr->e_shoff]);
 
   char* shstrtab = &buff[shdr[ehdr->e_shstrndx].sh_offset];
   for (std::size_t i = 0; i < ehdr->e_shnum; ++i) {
-    std::cout << &shstrtab[shdr[i].sh_name] << '\n';
-  }
+    if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rodata")) {
+      std::cout << "found .rodata, size: " << shdr[i].sh_size << '\n';
+      char* iter = &buff[shdr[i].sh_offset];
+      for (std::size_t j = 0; j < shdr[i].sh_size; ++j) {
+        unsigned char c = iter[j];
+        std::cout << (std::isprint(c) ? iter[j] : ' ') << ((j + 1) % 64 ? '\0' : '\n');
+      }
+      std::cout << '\n';
+    }
 
-  auto phdr = reinterpret_cast<Elf64_Phdr*>(&buff[ehdr->e_phoff]);
-  Accessor<Elf64_Phdr> base{&buff[0], phdr, ehdr->e_phnum};
+    std::cout << std::hex;
+    if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rela.plt")) {
+      std::cout << "found .rela.plt, size: " << shdr[i].sh_size << '\n';
+      auto iter = reinterpret_cast<Elf64_Rela*>(&buff[shdr[i].sh_offset]);
+      auto end = iter + shdr[i].sh_size / shdr[i].sh_entsize;
+      for (; iter != end; ++iter) {
+        std::cout << iter->r_offset << '\n';
+      }
+    }
+    std::cout << std::dec;
+    //std::cout << &shstrtab[shdr[i].sh_name] << '\n';
+  }
+  return 0;
+
+  using SegmentTraits = phdr_traits<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type>;
+
+  auto phdr = reinterpret_cast<typename EhdrTraits::segment_iterator>(&buff[ehdr->e_phoff]);
+  Accessor<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type> base{&buff[0], phdr, ehdr->e_phnum};
   for (auto i = 0; i < ehdr->e_phnum; ++i) {
     switch (phdr[i].p_type) {
       case PT_DYNAMIC:
-        DumpSym(base, reinterpret_cast<Elf64_Dyn*>(&base[phdr[i].p_vaddr]));
+        DumpDynamic(base, reinterpret_cast<typename SegmentTraits::dynamic_iterator>(&base[phdr[i].p_vaddr]));
         break;
       default:
         break;
     }
   }
-}
 
-void Dump32LE(std::vector<char>& buff) {
-  auto ehdr = reinterpret_cast<Elf32_Ehdr*>(&buff[0]);
-  auto shdr = reinterpret_cast<Elf32_Shdr*>(&buff[ehdr->e_shoff]);
-
-  char* shstrtab = &buff[shdr[ehdr->e_shstrndx].sh_offset];
-  for (std::size_t i = 0; i < ehdr->e_shnum; ++i) {
-    std::cout << &shstrtab[shdr[i].sh_name] << '\n';
-  }
-
-  auto phdr = reinterpret_cast<Elf32_Phdr*>(&buff[ehdr->e_phoff]);
-  Accessor<Elf32_Phdr> base{&buff[0], phdr, ehdr->e_phnum};
-  for (auto i = 0; i < ehdr->e_phnum; ++i) {
-    switch (phdr[i].p_type) {
-      case PT_DYNAMIC:
-        DumpSym(base, reinterpret_cast<Elf32_Dyn*>(&base[phdr[i].p_vaddr]));
-        break;
-      default:
-        break;
-    }
-  }
+  return 0;
 }
 
 void ELF::Dump(std::vector<char>& buff) {
-  if (!std::memcmp(&buff[0], ELFMAG, SELFMAG)) {
-    if (buff[EI_CLASS] == ELFCLASS32) {
-      if (buff[EI_DATA] == ELFDATA2LSB) {
-        std::cout << "dump ELF32 (little-endian)\n";
-        Dump32LE(buff);
-      } else if (buff[EI_DATA] == ELFDATA2MSB) {
-        std::cerr << "big endian\n";
-      } else {
-        std::cerr << "invalid ELF data endian\n";
-      }
-    } else if (buff[EI_CLASS] == ELFCLASS64) {
-      if (buff[EI_DATA] == ELFDATA2LSB) {
-        std::cout << "dump ELF64 (little-endian)\n";
-        Dump64LE(buff);
-      } else if (buff[EI_DATA] == ELFDATA2MSB) {
-        std::cerr << "big endian\n";
-      } else {
-        std::cerr << "invalid ELF data endian\n";
-      }
-    } else {
-      std::cerr << "invalid ELF class\n";
-    }
+  if (std::memcmp(&buff[0], ELFMAG, SELFMAG)) {
+    std::cerr << "invalid ELF magic\n";
+    return;
+  }
+
+  if (buff[EI_DATA] != ELFDATA2LSB) {
+    std::cerr << "invalid ELF data endian\n";
+    return;
+  }
+
+  if (buff[EI_CLASS] == ELFCLASS32) {
+    std::cout << "dump ELF32 (little-endian)\n";
+    DumpHeader(buff, reinterpret_cast<const Elf32_Ehdr*>(&buff[0]));
+  } else if (buff[EI_CLASS] == ELFCLASS64) {
+    std::cout << "dump ELF64 (little-endian)\n";
+    DumpHeader(buff, reinterpret_cast<const Elf64_Ehdr*>(&buff[0]));
+  } else {
+    std::cerr << "invalid ELF class\n";
   }
 }

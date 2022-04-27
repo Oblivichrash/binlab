@@ -585,6 +585,39 @@ enum {
   STV_PROTECTED = 3   // Not preemptible, not exported
 };
 
+// Relocation table entry without addend (in section of type SHT_REL).
+struct Elf32_Rel {
+  Elf32_Addr	r_offset;		// Address
+  Elf32_Word	r_info;			// Relocation type and symbol index
+};
+
+struct Elf64_Rel {
+  Elf64_Addr	r_offset;		// Address
+  Elf64_Xword	r_info;			// Relocation type and symbol index
+};
+
+// Relocation table entry with addend (in section of type SHT_RELA).
+struct Elf32_Rela {
+  Elf32_Addr	r_offset;		// Address
+  Elf32_Word	r_info;			// Relocation type and symbol index
+  Elf32_Sword	r_addend;		// Addend
+};
+
+struct Elf64_Rela {
+  Elf64_Addr	r_offset;		// Address
+  Elf64_Xword	r_info;			// Relocation type and symbol index
+  Elf64_Sxword	r_addend;		// Addend
+};
+
+// How to extract and insert information held in the r_info field.
+#define ELF32_R_SYM(val)            ((val) >> 8)
+#define ELF32_R_TYPE(val)           ((val) & 0xff)
+#define ELF32_R_INFO(sym, type)     (((sym) << 8) + ((type) & 0xff))
+
+#define ELF64_R_SYM(i)              ((i) >> 32)
+#define ELF64_R_TYPE(i)             ((i) & 0xffffffff)
+#define ELF64_R_INFO(sym,type)      ((((Elf64_Xword) (sym)) << 32) + (type))
+
 // Program segment header.
 struct Elf32_Phdr {
   Elf32_Word  p_type;     // Segment type

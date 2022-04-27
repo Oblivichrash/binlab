@@ -12,6 +12,35 @@
 
 namespace binlab {
 
+namespace address {
+
+template <typename Rep, typename Type, typename Segment>
+class addr {
+ public:
+  using traits_type         = traits::segment_traits<Segment>;
+
+  using value_type          = Rep;
+  using iterator            = typename traits_type::iterator;
+  using const_iterator      = typename traits_type::const_iterator;
+  using size_type           = typename traits_type::size_type;
+
+  addr(const_iterator first, const_iterator last) : first_{first}, last_{last} {}
+  addr(const_iterator first, size_type size) : first_{first}, last_{first + size} {}
+
+ private:
+  //using value_type = typename traits_type::value_type;
+  using iterator = typename traits_type::iterator;
+  using const_iterator = typename traits_type::const_iterator;
+  using size_type = typename traits_type::size_type;
+  using address_type = typename traits_type::address_type;
+
+  const_iterator first_;
+  const_iterator last_;
+  Rep base;
+};
+
+}  // namespace address
+
 template <typename T>
 class segments {
  public:
