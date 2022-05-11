@@ -209,26 +209,43 @@ struct phdr_traits<Elf32_Phdr> {
   using dynamic_iterator = Elf32_Dyn*;
 };
 
+template <typename T>
+struct shdr_traits;
+
+template <>
+struct shdr_traits<Elf64_Shdr> {
+  using rel_iterator = Elf64_Rel*;
+  using rela_iterator = Elf64_Rela*;
+};
+
+template <>
+struct shdr_traits<Elf32_Shdr> {
+  using rel_iterator = Elf32_Rel*;
+  using rela_iterator = Elf32_Rela*;
+};
+
 template <typename Ehdr, typename EhdrTraits = ehdr_traits<Ehdr>>
 int DumpHeader(std::vector<char>& buff, const Ehdr* ehdr) {
   auto shdr = reinterpret_cast<typename EhdrTraits::section_iterator>(&buff[ehdr->e_shoff]);
 
   char* shstrtab = &buff[shdr[ehdr->e_shstrndx].sh_offset];
   for (std::size_t i = 0; i < ehdr->e_shnum; ++i) {
-    if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rodata")) {
-      std::cout << "found .rodata, size: " << shdr[i].sh_size << '\n';
-      char* iter = &buff[shdr[i].sh_offset];
-      for (std::size_t j = 0; j < shdr[i].sh_size; ++j) {
-        unsigned char c = iter[j];
-        std::cout << (std::isprint(c) ? iter[j] : ' ') << ((j + 1) % 64 ? '\0' : '\n');
-      }
-      std::cout << '\n';
-    }
+    //if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rodata")) {
+    //  std::cout << "found .rodata, size: " << shdr[i].sh_size << '\n';
+    //  char* iter = &buff[shdr[i].sh_offset];
+    //  for (std::size_t j = 0; j < shdr[i].sh_size; ++j) {
+    //    unsigned char c = iter[j];
+    //    std::cout << (std::isprint(c) ? iter[j] : ' ') << ((j + 1) % 64 ? '\0' : '\n');
+    //  }
+    //  std::cout << '\n';
+    //}
 
     std::cout << std::hex;
-    if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rela.plt")) {
+    //if (!std::strcmp(&shstrtab[shdr[i].sh_name], ".rela.plt")) {
+    if (shdr[i].sh_type == SHT_RELA) {
+      std::cout << &shstrtab[shdr[i].sh_name] << '\n';
       std::cout << "found .rela.plt, size: " << shdr[i].sh_size << '\n';
-      auto iter = reinterpret_cast<Elf64_Rela*>(&buff[shdr[i].sh_offset]);
+      auto iter = reinterpret_cast<typename shdr_traits<std::iterator_traits<typename EhdrTraits::section_iterator>::value_type>::rela_iterator>(&buff[shdr[i].sh_offset]);
       auto end = iter + shdr[i].sh_size / shdr[i].sh_entsize;
       for (; iter != end; ++iter) {
         std::cout << iter->r_offset << '\n';
