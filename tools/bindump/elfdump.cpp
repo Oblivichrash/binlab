@@ -245,30 +245,30 @@ int DumpHeader(std::vector<char>& buff, const Ehdr* ehdr) {
     if (shdr[i].sh_type == SHT_RELA) {
       std::cout << &shstrtab[shdr[i].sh_name] << '\n';
       std::cout << "found .rela.plt, size: " << shdr[i].sh_size << '\n';
-      auto iter = reinterpret_cast<typename shdr_traits<std::iterator_traits<typename EhdrTraits::section_iterator>::value_type>::rela_iterator>(&buff[shdr[i].sh_offset]);
-      auto end = iter + shdr[i].sh_size / shdr[i].sh_entsize;
-      for (; iter != end; ++iter) {
-        std::cout << iter->r_offset << '\n';
-      }
+      //auto iter = reinterpret_cast<typename shdr_traits<std::iterator_traits<typename EhdrTraits::section_iterator>::value_type>::rela_iterator>(&buff[shdr[i].sh_offset]);
+      //auto end = iter + shdr[i].sh_size / shdr[i].sh_entsize;
+      //for (; iter != end; ++iter) {
+      //  std::cout << iter->r_offset << '\n';
+      //}
     }
     std::cout << std::dec;
     //std::cout << &shstrtab[shdr[i].sh_name] << '\n';
   }
   return 0;
 
-  using SegmentTraits = phdr_traits<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type>;
+  //using SegmentTraits = phdr_traits<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type>;
 
-  auto phdr = reinterpret_cast<typename EhdrTraits::segment_iterator>(&buff[ehdr->e_phoff]);
-  Accessor<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type> base{&buff[0], phdr, ehdr->e_phnum};
-  for (auto i = 0; i < ehdr->e_phnum; ++i) {
-    switch (phdr[i].p_type) {
-      case PT_DYNAMIC:
-        DumpDynamic(base, reinterpret_cast<typename SegmentTraits::dynamic_iterator>(&base[phdr[i].p_vaddr]));
-        break;
-      default:
-        break;
-    }
-  }
+  //auto phdr = reinterpret_cast<typename EhdrTraits::segment_iterator>(&buff[ehdr->e_phoff]);
+  //Accessor<std::iterator_traits<typename EhdrTraits::segment_iterator>::value_type> base{&buff[0], phdr, ehdr->e_phnum};
+  //for (auto i = 0; i < ehdr->e_phnum; ++i) {
+  //  switch (phdr[i].p_type) {
+  //    case PT_DYNAMIC:
+  //      DumpDynamic(base, reinterpret_cast<typename SegmentTraits::dynamic_iterator>(&base[phdr[i].p_vaddr]));
+  //      break;
+  //    default:
+  //      break;
+  //  }
+  //}
 
   return 0;
 }

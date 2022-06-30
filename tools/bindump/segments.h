@@ -29,10 +29,10 @@ class addr {
 
  private:
   //using value_type = typename traits_type::value_type;
-  using iterator = typename traits_type::iterator;
-  using const_iterator = typename traits_type::const_iterator;
-  using size_type = typename traits_type::size_type;
-  using address_type = typename traits_type::address_type;
+  //using iterator = typename traits_type::iterator;
+  //using const_iterator = typename traits_type::const_iterator;
+  //using size_type = typename traits_type::size_type;
+  //using address_type = typename traits_type::address_type;
 
   const_iterator first_;
   const_iterator last_;
