@@ -39,8 +39,8 @@ class address {
 
   constexpr auto operator<=>(const address&) const noexcept = default;
 
-  //template <typename Type, std::enable_if_t<std::is_pointer_v<Type> || std::is_reference_v<Type>, int> = 0>
-  //Type object_cast() noexcept { return reinterpret_cast<Type>(value_); }
+  template <typename Type, std::enable_if_t<std::is_pointer_v<Type> || std::is_reference_v<Type>, int> = 0>
+  Type object_cast() noexcept { return reinterpret_cast<Type>(value_); }
 
   address& operator+=(const address& rhs) noexcept {
     value_ += rhs.value_;
@@ -96,27 +96,72 @@ constexpr auto snap_by_ordinal(const IMAGE_THUNK_DATA32& thunk) { return IMAGE_S
 constexpr auto ordinal(const IMAGE_THUNK_DATA64& thunk) { return IMAGE_ORDINAL64(thunk.u1.Ordinal); }
 constexpr auto ordinal(const IMAGE_THUNK_DATA32& thunk) { return IMAGE_ORDINAL32(thunk.u1.Ordinal); }
 
-template <typename THUNK_DATA, typename NT_HEADER>
-std::ostream& import_dump(std::ostream& os, void* base, NT_HEADER& nt) {
+std::ostream& operator<<(std::ostream& os, const IMAGE_IMPORT_DESCRIPTOR& descriptor) {
+  os << "OriginalFirstThunk: " << std::setw(8) << descriptor.OriginalFirstThunk;
+  os << "TimeDateStamp: " << std::setw(8) << descriptor.TimeDateStamp;
+  os << "ForwarderChain: " << std::setw(8) << descriptor.ForwarderChain;
+  os << "Name: " << std::setw(8) << descriptor.Name;
+  os << "FirstThunk: " << std::setw(8) << descriptor.FirstThunk;
+  return os;
+}
+
+template <typename THUNK, typename NT>
+std::ostream& import_dump(std::ostream& os, void* base, NT& nt) {
   auto buff = static_cast<char*>(base);
 
   auto sections = IMAGE_FIRST_SECTION(&nt);
+  os << std::hex;
+  auto virtual_address = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
   for (std::size_t i = 0; i < nt.FileHeader.NumberOfSections; ++i) {
-    auto virtual_address = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
-    if (sections[i].VirtualAddress < virtual_address && virtual_address < (sections[i].VirtualAddress + sections[i].Misc.VirtualSize)) {
+    if (sections[i].VirtualAddress <= virtual_address && virtual_address < (sections[i].VirtualAddress + sections[i].Misc.VirtualSize)) {
       os << sections[i].Name << '\n';
       auto delta = sections[i].VirtualAddress - sections[i].PointerToRawData;
 
-      for (auto descriptor = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&buff[virtual_address - delta]); descriptor->Name; ++descriptor) {
-        std::cout << &buff[descriptor->Name - delta] << '\n';
-
-        for (auto thunk = reinterpret_cast<THUNK_DATA*>(&buff[descriptor->OriginalFirstThunk - delta]); thunk->u1.Ordinal; ++thunk) {
+      for (auto descriptor = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&buff[virtual_address - delta]); descriptor->Characteristics; ++descriptor) {
+        os << &buff[descriptor->Name - delta] << "\n  " << std::left << *descriptor << std::right << "\n\n";
+       
+        for (auto thunk = reinterpret_cast<THUNK*>(&buff[descriptor->OriginalFirstThunk - delta]); thunk->u1.AddressOfData; ++thunk) {
+          os << std::setw(16 + 2) << thunk->u1.Ordinal;
           if (!snap_by_ordinal(*thunk)) {
-            std::cout << '\t' << &reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(buff[thunk->u1.Function - delta]).Name[0] << '\n';
+            auto& name = reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(buff[thunk->u1.AddressOfData - delta]);
+            os << std::setw(6) << name.Hint << ": " << &name.Name[0] << '\n';
           } else {
-            std::cout << '\t' << ordinal(*thunk) << '\n';
+            os << std::setw(6) << ordinal(*thunk) << '\n';
           }
         }
+        os << '\n';
+      }
+    }
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const IMAGE_BASE_RELOCATION& relocation) {
+  os << "VirtualAddress: " << std::setw(8) << relocation.VirtualAddress;
+  os << "SizeOfBlock: " << std::setw(8) << relocation.SizeOfBlock;
+  return os;
+}
+
+template <typename NT>
+std::ostream& relocation_dump(std::ostream& os, void* base, NT& nt) {
+  auto buff = static_cast<char*>(base);
+
+  auto sections = IMAGE_FIRST_SECTION(&nt);
+  os << std::hex;
+  auto virtual_address = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+  for (std::size_t i = 0; i < nt.FileHeader.NumberOfSections; ++i) {
+    if (sections[i].VirtualAddress <= virtual_address && virtual_address < (sections[i].VirtualAddress + sections[i].Misc.VirtualSize)) {
+      os << sections[i].Name << '\n';
+      auto delta = sections[i].VirtualAddress - sections[i].PointerToRawData;
+
+      for (IMAGE_BASE_RELOCATION* relocation = reinterpret_cast<IMAGE_BASE_RELOCATION*>(&buff[virtual_address - delta]), *relocation_next; relocation->SizeOfBlock && relocation->VirtualAddress; relocation = relocation_next) {
+        relocation_next = reinterpret_cast<IMAGE_BASE_RELOCATION*>(reinterpret_cast<std::size_t>(relocation) + relocation->SizeOfBlock);
+
+        os << std::left << *relocation << std::right << '\n';
+        for (auto entry = reinterpret_cast<WORD*>(relocation + 1); entry != reinterpret_cast<WORD*>(relocation_next); ++entry) {
+          std::cout << "  RVA: " << std::setw(8) << (relocation->VirtualAddress + (*entry & 0x0fff)) << "\ttype: " << (*entry >> 12) << '\n';
+        }
+        std::cout << '\n';
       }
     }
   }
@@ -138,10 +183,12 @@ int main(int argc, char* argv[]) try {
       auto nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(&buff[dos->e_lfanew]);
       if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
         std::cout << "PE64\n";
-        import_dump<IMAGE_THUNK_DATA64>(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        //import_dump<IMAGE_THUNK_DATA64>(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        relocation_dump(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
       } else if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
         std::cout << "PE32\n";
-        import_dump<IMAGE_THUNK_DATA32>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
+        //import_dump<IMAGE_THUNK_DATA32>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
+        relocation_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
       } else {
         std::cerr << "the optional header magic is invalid\n";
       }

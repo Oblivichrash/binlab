@@ -91,7 +91,6 @@ std::ostream& gnuhash_dump(std::ostream& os, void* base) {
   for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
     if (shdr[i].sh_type == SHT_GNU_HASH) {
       os << &shstrtab[shdr[i].sh_name] << '\n';
-
       //os << &shstrtab[shdr[shdr[i].sh_link].sh_name] << '\n';
       //os << &shstrtab[shdr[shdr[shdr[i].sh_link].sh_link].sh_name] << '\n';
       
