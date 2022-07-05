@@ -90,6 +90,57 @@ std::ostream& memdump(std::ostream& os, void* base, std::size_t rows) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const IMAGE_EXPORT_DIRECTORY& directory) {
+  os << "Name: " << std::setw(6) << directory.Name;
+  os << "Characteristics: " << std::setw(4) << directory.Characteristics;
+  // os << "TimeDateStamp: " << std::ctime(reinterpret_cast<const time_t*>(&directory.TimeDateStamp));
+  os << "Base: " << std::setw(4) << directory.Base;
+  os << "NumberOfFunctions: " << std::setw(4) << directory.NumberOfFunctions;
+  os << "NumberOfNames: " << std::setw(4) << directory.NumberOfNames;
+  os << "Version: " << directory.MajorVersion << '.' << directory.MinorVersion;
+  return os;
+}
+
+template <typename NT>
+std::ostream& export_dump(std::ostream& os, void* base, NT& nt) {
+  auto buff = static_cast<char*>(base);
+
+  auto sections = IMAGE_FIRST_SECTION(&nt);
+  os << std::hex;
+  auto virtual_address = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+  for (std::size_t i = 0; i < nt.FileHeader.NumberOfSections; ++i) {
+    if (sections[i].VirtualAddress <= virtual_address && virtual_address < (sections[i].VirtualAddress + sections[i].Misc.VirtualSize)) {
+      os << sections[i].Name << '\n';
+      auto delta = sections[i].VirtualAddress - sections[i].PointerToRawData;
+
+      auto directory = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(&buff[virtual_address - delta]);
+      os << &buff[directory->Name - delta] << "\n  " << std::left << *directory << std::right << "\n\n";
+
+      auto functions = reinterpret_cast<const std::uint32_t*>(&buff[directory->AddressOfFunctions - delta]);
+      auto ordinals = reinterpret_cast<const std::uint16_t*>(&buff[directory->AddressOfNameOrdinals - delta]);
+      auto names = reinterpret_cast<const std::uint32_t*>(&buff[directory->AddressOfNames - delta]);
+
+      for (std::size_t j = 0; j < directory->NumberOfNames; ++j) {
+        if (functions[ordinals[j]]) {
+          os << std::setw(6) << ordinals[j] + directory->Base << std::setw(8) << functions[ordinals[j]] << '\t' << &buff[names[j] - delta] << '\n';
+        }
+      }
+
+      //for (std::size_t j = 0; j < directory->NumberOfFunctions; ++j) {
+      //  if (functions[j]) {
+      //    os << std::setw(6) << j + directory->Base << std::setw(8) << functions[j] << '\t';
+      //    for (std::size_t k = 0; k < directory->NumberOfNames; ++k) {
+      //      if (ordinals[k] == j) {
+      //        os << &buff[names[k] - delta] << '\n';
+      //      }
+      //    }
+      //  }
+      //}
+    }
+  }
+  return os;
+}
+
 constexpr auto snap_by_ordinal(const IMAGE_THUNK_DATA64& thunk) { return IMAGE_SNAP_BY_ORDINAL64(thunk.u1.Ordinal); }
 constexpr auto snap_by_ordinal(const IMAGE_THUNK_DATA32& thunk) { return IMAGE_SNAP_BY_ORDINAL32(thunk.u1.Ordinal); }
 
@@ -159,9 +210,9 @@ std::ostream& relocation_dump(std::ostream& os, void* base, NT& nt) {
 
         os << std::left << *relocation << std::right << '\n';
         for (auto entry = reinterpret_cast<WORD*>(relocation + 1); entry != reinterpret_cast<WORD*>(relocation_next); ++entry) {
-          std::cout << "  RVA: " << std::setw(8) << (relocation->VirtualAddress + (*entry & 0x0fff)) << "\ttype: " << (*entry >> 12) << '\n';
+          os << "  RVA: " << std::setw(8) << (relocation->VirtualAddress + (*entry & 0x0fff)) << "\ttype: " << (*entry >> 12) << '\n';
         }
-        std::cout << '\n';
+        os << '\n';
       }
     }
   }
@@ -183,12 +234,14 @@ int main(int argc, char* argv[]) try {
       auto nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(&buff[dos->e_lfanew]);
       if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
         std::cout << "PE64\n";
-        //import_dump<IMAGE_THUNK_DATA64>(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
-        relocation_dump(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        export_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        //import_dump<IMAGE_THUNK_DATA64>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        //relocation_dump(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
       } else if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
         std::cout << "PE32\n";
+        export_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
         //import_dump<IMAGE_THUNK_DATA32>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
-        relocation_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
+        //relocation_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
       } else {
         std::cerr << "the optional header magic is invalid\n";
       }
