@@ -2,10 +2,11 @@
 
 #include <Windows.h>
 
+#include <codecvt>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <span>
+#include <locale>
 #include <type_traits>
 #include <vector>
 
@@ -187,6 +188,74 @@ std::ostream& import_dump(std::ostream& os, void* base, NT& nt) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIRECTORY& directory) {
+  os << "Characteristics: " << std::setw(8) << directory.Characteristics;
+  os << "TimeDateStamp: " << std::setw(8) << directory.TimeDateStamp;
+  os << "NumberOfNamedEntries: " << std::setw(8) << directory.NumberOfNamedEntries;
+  os << "NumberOfIdEntries: " << std::setw(8) << directory.NumberOfIdEntries;
+  os << "Version: " << directory.MajorVersion << '.' << directory.MinorVersion;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIRECTORY_ENTRY& entry) {
+  os << "NameOffset: " << std::setw(8) << entry.NameOffset;
+  os << "OffsetToData: " << std::setw(9) << entry.OffsetToData;
+  os << "OffsetToDirectory: " << std::setw(8) << entry.OffsetToDirectory;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DATA_ENTRY& data) {
+  os << "OffsetToData: " << std::setw(8) << data.OffsetToData;
+  os << "Size: " << std::setw(8) << data.Size;
+  os << "CodePage: " << std::setw(8) << data.CodePage;
+  return os;
+}
+
+std::ostream& resource_dir_dump(std::ostream& os, IMAGE_RESOURCE_DIRECTORY* directory, char* resource, std::size_t depth) {
+  os << std::setw((depth + 1) * 2) << "  " << *directory << '\n';
+  auto entry = reinterpret_cast<IMAGE_RESOURCE_DIRECTORY_ENTRY*>(directory + 1);
+  for (std::size_t i = 0; i < directory->NumberOfIdEntries + directory->NumberOfNamedEntries; ++i) {
+    os << std::setw((depth + 1) * 2) << "  " << entry[i];
+    if (entry[i].NameIsString) {
+      auto name = reinterpret_cast<IMAGE_RESOURCE_DIR_STRING_U*>(&resource[entry[i].NameOffset]);
+      os << "Name: ";
+      //os.write(reinterpret_cast<char*>(name->NameString), (name->Length * sizeof(name->NameString[0])));
+    } else {
+      os << "ID: " << std::setw(4) << entry[i].Id;
+    }
+    os << '\n';
+
+    if (entry[i].DataIsDirectory) {
+      resource_dir_dump(os, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&resource[entry[i].OffsetToDirectory]), resource, depth + 1);
+    } else {
+      os << std::setw((depth + 2) * 2) << "  " << reinterpret_cast<IMAGE_RESOURCE_DATA_ENTRY&>(resource[entry[i].OffsetToData]) << '\n';
+    }
+  }
+  return os;
+}
+
+template <typename NT>
+std::ostream& resource_dump(std::ostream& os, void* base, NT& nt) {
+  auto buff = static_cast<char*>(base);
+
+  auto sections = IMAGE_FIRST_SECTION(&nt);
+  os << std::hex;
+  auto virtual_address = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+  for (std::size_t i = 0; i < nt.FileHeader.NumberOfSections; ++i) {
+    if (sections[i].VirtualAddress <= virtual_address && virtual_address < (sections[i].VirtualAddress + sections[i].Misc.VirtualSize)) {
+      os << sections[i].Name << '\n';
+      auto delta = sections[i].VirtualAddress - sections[i].PointerToRawData;
+
+      auto base = &buff[virtual_address - delta];
+      os << std::left;
+      resource_dir_dump(os, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(base), base, 0);
+      os << std::right;
+    }
+  }
+
+  return os;
+}
+
 std::ostream& operator<<(std::ostream& os, const IMAGE_BASE_RELOCATION& relocation) {
   os << "VirtualAddress: " << std::setw(8) << relocation.VirtualAddress;
   os << "SizeOfBlock: " << std::setw(8) << relocation.SizeOfBlock;
@@ -236,11 +305,13 @@ int main(int argc, char* argv[]) try {
         std::cout << "PE64\n";
         export_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
         //import_dump<IMAGE_THUNK_DATA64>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        resource_dump(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
         //relocation_dump(std::cout, buff.data(),reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
       } else if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
         std::cout << "PE32\n";
         export_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
         //import_dump<IMAGE_THUNK_DATA32>(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
+        resource_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
         //relocation_dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
       } else {
         std::cerr << "the optional header magic is invalid\n";
