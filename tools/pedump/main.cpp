@@ -127,6 +127,14 @@ std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIRECTORY_ENTRY&
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIR_STRING_U& str) {
+  std::locale loc;
+  std::string name(str.Length, '.');
+  std::use_facet<std::ctype<std::decay_t<decltype(str.NameString[0])>>>(loc).narrow(str.NameString, str.NameString + str.Length, '.', name.data());
+  os << "Name(" << str.Length << "): " << name;
+  return os;
+}
+
 std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DATA_ENTRY& data) {
   os << "OffsetToData: " << std::setw(8) << data.OffsetToData;
   os << "Size: " << std::setw(8) << data.Size;
@@ -140,16 +148,16 @@ std::ostream& operator<<(std::ostream& os, const IMAGE_BASE_RELOCATION& relocati
   return os;
 }
 
-std::ostream& dump(std::ostream& os, char* buff, std::uint64_t delta, IMAGE_EXPORT_DIRECTORY* directory) {
-  os << &buff[directory->Name - delta] << "\n  " << std::left << *directory << std::right << '\n';
+std::ostream& dump(std::ostream& os, char* base, IMAGE_SECTION_HEADER& section, IMAGE_EXPORT_DIRECTORY* directory) {
+  os << &base[directory->Name - section.VirtualAddress] << "\n  " << std::left << *directory << std::right << '\n';
 
-  auto functions = reinterpret_cast<const std::uint32_t*>(&buff[directory->AddressOfFunctions - delta]);
-  auto ordinals = reinterpret_cast<const std::uint16_t*>(&buff[directory->AddressOfNameOrdinals - delta]);
-  auto names = reinterpret_cast<const std::uint32_t*>(&buff[directory->AddressOfNames - delta]);
+  auto functions = reinterpret_cast<const std::uint32_t*>(&base[directory->AddressOfFunctions - section.VirtualAddress]);
+  auto ordinals = reinterpret_cast<const std::uint16_t*>(&base[directory->AddressOfNameOrdinals - section.VirtualAddress]);
+  auto names = reinterpret_cast<const std::uint32_t*>(&base[directory->AddressOfNames - section.VirtualAddress]);
 
   for (std::size_t j = 0; j < directory->NumberOfNames; ++j) {
     if (functions[ordinals[j]]) {
-      os << std::setw(6) << ordinals[j] + directory->Base << std::setw(8) << functions[ordinals[j]] << '\t' << &buff[names[j] - delta] << '\n';
+      os << std::setw(6) << ordinals[j] + directory->Base << std::setw(8) << functions[ordinals[j]] << '\t' << &base[names[j] - section.VirtualAddress] << '\n';
     }
   }
 
@@ -158,7 +166,7 @@ std::ostream& dump(std::ostream& os, char* buff, std::uint64_t delta, IMAGE_EXPO
   //    os << std::setw(6) << j + directory->Base << std::setw(8) << functions[j] << '\t';
   //    for (std::size_t k = 0; k < directory->NumberOfNames; ++k) {
   //      if (ordinals[k] == j) {
-  //        os << &buff[names[k] - delta] << '\n';
+  //        os << &base[names[k] - section.VirtualAddress] << '\n';
   //      }
   //    }
   //  }
@@ -173,14 +181,14 @@ constexpr auto ordinal(const IMAGE_THUNK_DATA64& thunk) { return IMAGE_ORDINAL64
 constexpr auto ordinal(const IMAGE_THUNK_DATA32& thunk) { return IMAGE_ORDINAL32(thunk.u1.Ordinal); }
 
 template <typename THUNK>
-std::ostream& dump(std::ostream& os, char* buff, std::uint64_t delta, IMAGE_IMPORT_DESCRIPTOR* descriptor) {
+std::ostream& dump(std::ostream& os, char* base, IMAGE_SECTION_HEADER& section, IMAGE_IMPORT_DESCRIPTOR* descriptor) {
   for (; descriptor->Characteristics; ++descriptor) {
-    os << &buff[descriptor->Name - delta] << "\n  " << std::left << *descriptor << std::right << '\n';
+    os << &base[descriptor->Name - section.VirtualAddress] << "\n  " << std::left << *descriptor << std::right << '\n';
        
-    for (auto thunk = reinterpret_cast<THUNK*>(&buff[descriptor->OriginalFirstThunk - delta]); thunk->u1.AddressOfData; ++thunk) {
+    for (auto thunk = reinterpret_cast<THUNK*>(&base[descriptor->OriginalFirstThunk - section.VirtualAddress]); thunk->u1.AddressOfData; ++thunk) {
       os << std::setw(16 + 2) << thunk->u1.Ordinal;
       if (!snap_by_ordinal(*thunk)) {
-        auto& name = reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(buff[thunk->u1.AddressOfData - delta]);
+        auto& name = reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(base[thunk->u1.AddressOfData - section.VirtualAddress]);
         os << std::setw(6) << name.Hint << ": " << &name.Name[0] << '\n';
        } else {
         os << std::setw(6) << ordinal(*thunk) << '\n';
@@ -191,31 +199,29 @@ std::ostream& dump(std::ostream& os, char* buff, std::uint64_t delta, IMAGE_IMPO
   return os;
 }
 
-std::ostream& dump(std::ostream& os, char* resource, IMAGE_RESOURCE_DIRECTORY* directory, std::size_t depth) {
-  os << std::left << std::setw((depth + 1) * 2) << "  " << *directory << '\n';
+std::ostream& dump(std::ostream& os, char* base, IMAGE_RESOURCE_DIRECTORY* directory, std::size_t depth) {
+  os << std::setw((depth + 1) * 2) << "  " << *directory << '\n';
   auto entry = reinterpret_cast<IMAGE_RESOURCE_DIRECTORY_ENTRY*>(directory + 1);
   for (std::size_t i = 0; i < directory->NumberOfIdEntries + directory->NumberOfNamedEntries; ++i) {
     os << std::setw((depth + 1) * 2) << "  " << entry[i];
     if (entry[i].NameIsString) {
-      auto name = reinterpret_cast<IMAGE_RESOURCE_DIR_STRING_U*>(&resource[entry[i].NameOffset]);
-      os << "Name: ";
-      //os.write(reinterpret_cast<char*>(name->NameString), (name->Length * sizeof(name->NameString[0])));
+      os << reinterpret_cast<IMAGE_RESOURCE_DIR_STRING_U&>(base[entry[i].NameOffset]);
     } else {
       os << "ID: " << std::setw(4) << entry[i].Id;
     }
     os << '\n';
 
     if (entry[i].DataIsDirectory) {
-      dump(os, resource, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&resource[entry[i].OffsetToDirectory]), depth + 1);
+      dump(os, base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[entry[i].OffsetToDirectory]), depth + 1);
     } else {
-      auto& data = reinterpret_cast<IMAGE_RESOURCE_DATA_ENTRY&>(resource[entry[i].OffsetToData]);
+      auto& data = reinterpret_cast<IMAGE_RESOURCE_DATA_ENTRY&>(base[entry[i].OffsetToData]);
       os << std::setw((depth + 2) * 2) << "  " << data << '\n';
     }
   }
-  return os << std::right;
+  return os;
 }
 
-std::ostream& dump(std::ostream& os, char* buff, IMAGE_BASE_RELOCATION* relocation) {
+std::ostream& dump(std::ostream& os, IMAGE_BASE_RELOCATION* relocation) {
   for (IMAGE_BASE_RELOCATION* relocation_next; relocation->SizeOfBlock && relocation->VirtualAddress; relocation = relocation_next) {
     relocation_next = reinterpret_cast<IMAGE_BASE_RELOCATION*>(reinterpret_cast<std::size_t>(relocation) + relocation->SizeOfBlock);
 
@@ -233,34 +239,73 @@ std::ostream& dump(std::ostream& os, char* buff, NT& nt) {
   auto sections = IMAGE_FIRST_SECTION(&nt);
 
   for (std::size_t i = 0; i < IMAGE_NUMBEROF_DIRECTORY_ENTRIES; ++i) {
-    auto virtual_address = nt.OptionalHeader.DataDirectory[i].VirtualAddress;
+    if (auto virtual_address = nt.OptionalHeader.DataDirectory[i].VirtualAddress) {
+      for (std::size_t j = 0; j < nt.FileHeader.NumberOfSections; ++j) {
+        if (sections[j].VirtualAddress <= virtual_address && virtual_address < (sections[j].VirtualAddress + sections[j].Misc.VirtualSize)) {
+          if (!sections[j].SizeOfRawData) {
+            os << "invalid raw data size: " << sections[j].Name << '\n';
+            continue;
+          }
+          auto base = &buff[sections[j].PointerToRawData];
+          auto offset = virtual_address - sections[j].VirtualAddress;
 
-    for (std::size_t j = 0; j < nt.FileHeader.NumberOfSections; ++j) {
-      if (sections[j].VirtualAddress <= virtual_address && virtual_address < (sections[j].VirtualAddress + sections[j].Misc.VirtualSize)) {
-        std::uint64_t delta = sections[j].VirtualAddress - sections[j].PointerToRawData;
-        auto file_offset = virtual_address - delta;
-
-        switch (i) {
-          case IMAGE_DIRECTORY_ENTRY_EXPORT:
-            os << "export directory:\n\n";
-            dump(os, buff, delta, reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(&buff[file_offset]));
-            break;
-          case IMAGE_DIRECTORY_ENTRY_IMPORT:
-            os << "import descriptor:\n\n";
-            dump<std::conditional_t<std::is_same_v<decltype(nt), IMAGE_NT_HEADERS64>, IMAGE_THUNK_DATA64, IMAGE_THUNK_DATA32>>(os, buff, delta, reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&buff[file_offset]));
-            break;
-          case IMAGE_DIRECTORY_ENTRY_RESOURCE:
-            os << "resource directory:\n\n";
-            dump(os, &buff[file_offset], reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&buff[file_offset]), 0);
-            break;
-          case IMAGE_DIRECTORY_ENTRY_BASERELOC:
-            os << "base relocation:\n\n";
-            dump(os, buff, reinterpret_cast<IMAGE_BASE_RELOCATION*>(&buff[file_offset]));
-            break;
-          default:
-            break;
+          switch (i) {
+            case IMAGE_DIRECTORY_ENTRY_EXPORT:
+              os << "export directory:\n";
+              dump(os, base, sections[j], reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(&base[offset]));
+              break;
+            case IMAGE_DIRECTORY_ENTRY_IMPORT:
+              os << "import directory:\n";
+              dump<std::conditional_t<std::is_same_v<decltype(nt), IMAGE_NT_HEADERS64>, IMAGE_THUNK_DATA64, IMAGE_THUNK_DATA32>>(os, base, sections[j], reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&base[offset]));
+              break;
+            case IMAGE_DIRECTORY_ENTRY_RESOURCE:
+              os << "resource directory:\n";
+              os << std::left;
+              dump(os, base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[offset]), 0);
+              os << std::right;
+              break;
+            case IMAGE_DIRECTORY_ENTRY_EXCEPTION:
+              os << "exception directory\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_SECURITY:
+              os << "security directory\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_BASERELOC:
+              os << "base relocation table:\n";
+              dump(os, reinterpret_cast<IMAGE_BASE_RELOCATION*>(&base[offset]));
+              break;
+            case IMAGE_DIRECTORY_ENTRY_DEBUG:
+              os << "debug directory\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:
+              os << "architecture specific data\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_GLOBALPTR:
+              os << "RVA of GP\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_TLS:
+              os << "TLS directory\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG:
+              os << "load configuration directory\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT:
+              os << "bound import directory in headers\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_IAT:
+              os << "import address table\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT:
+              os << "delay load import descriptors\n";
+              break;
+            case IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR:
+              os << "COM runtime descriptor\n";
+              break;
+            default:
+              break;
+          }
+          os << '\n';
         }
-        os << '\n';
       }
     }
   }
@@ -284,10 +329,10 @@ int main(int argc, char* argv[]) try {
       std::cout << std::hex;
       if (ptr->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
         std::cout << "PE64\n";
-        dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[dos->e_lfanew]));
+        dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS64&>(*ptr));
       } else if (ptr->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
         std::cout << "PE32\n";
-        dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(buff[dos->e_lfanew]));
+        dump(std::cout, buff.data(), reinterpret_cast<IMAGE_NT_HEADERS32&>(*ptr));
       } else {
         std::cerr << "the optional header magic is invalid\n";
       }
@@ -303,4 +348,3 @@ int main(int argc, char* argv[]) try {
   std::cerr << "error: " << e.what() << '\n';
   return 1;
 }
-
