@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <type_traits>
@@ -22,21 +23,81 @@ std::ostream& memdump(std::ostream& os, void* base, std::size_t rows) {
   return os;
 }
 
-template <typename Shdr, typename Ehdr>
-std::ostream& shdrdump(std::ostream& os, void* base) {
-  auto buff = static_cast<std::uint8_t*>(base);
-
-  auto& ehdr = reinterpret_cast<Ehdr&>(buff[0]);
-  auto shdr = reinterpret_cast<Shdr*>(&buff[ehdr.e_shoff]);
-
-  auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
-  for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
-    os << &shstrtab[shdr[i].sh_name] << '\n';
-  }
-  os << '\n';
-
+std::ostream& operator<<(std::ostream& os, const Elf32_Sym& sym) {
+  os << "name: " << std::setw(8) << sym.st_name;
+  os << "info: " << std::setw(4) << unsigned{sym.st_info};
+  os << "other: " << std::setw(4) << unsigned{sym.st_other};
+  os << "shndx: " << std::setw(8) << sym.st_shndx;
+  os << "value: " << std::setw(8) << sym.st_value;
+  os << "size: " << std::setw(8) << sym.st_size;
   return os;
 }
+
+std::ostream& operator<<(std::ostream& os, const Elf64_Sym& sym) {
+  os << "name: " << std::setw(8) << sym.st_name;
+  os << "info: " << std::setw(4) << unsigned{sym.st_info};
+  os << "other: " << std::setw(4) << unsigned{sym.st_other};
+  os << "shndx: " << std::setw(8) << sym.st_shndx;
+  os << "value: " << std::setw(8) << sym.st_value;
+  os << "size: " << std::setw(8) << sym.st_size;
+  return os;
+}
+
+template <typename T>
+class const_symtab_iterator {
+ public:
+  using value_type = std::pair<const char*, const T&>;
+  using difference_type = std::uint64_t;
+  using pointer = const T*;
+  using reference = const T&;
+
+  const_symtab_iterator(T* symtab, char* strtab) noexcept : sym_{symtab}, strtab_{strtab} {}
+
+  constexpr value_type operator*() const noexcept { return {&strtab_[sym_->st_name], *sym_}; }
+  constexpr pointer operator->() const noexcept { return sym_; }
+
+  const_symtab_iterator& operator++() noexcept {
+    ++sym_;
+    return *this;
+  }
+
+  const_symtab_iterator operator++(int) noexcept {
+    const_symtab_iterator tmp = *this;
+    ++*this;
+    return tmp;
+  }
+
+  constexpr bool operator!=(const_symtab_iterator& rhs) const noexcept { return rhs.sym_ != sym_; }
+
+ private:
+  T* sym_;
+  char* strtab_;
+};
+
+template <typename T>
+class symtab_iterator : public const_symtab_iterator<T> {
+ public:
+  using value_type = std::pair<char*, T&>;
+  using difference_type = std::uint64_t;
+  using pointer = T*;
+  using reference = T&;
+
+  using const_symtab_iterator<T>::const_symtab_iterator;
+
+  constexpr value_type operator*() const noexcept { return {const_cast<char*>(const_symtab_iterator<T>::operator*().first), const_cast<reference>(const_symtab_iterator<T>::operator*().second)}; }
+  constexpr pointer operator->() const noexcept { return this->_Ptr; }
+
+  constexpr symtab_iterator& operator++() noexcept {
+    const_symtab_iterator<T>::operator++();
+    return *this;
+  }
+
+  constexpr symtab_iterator operator++(int) noexcept {
+    symtab_iterator tmp = *this;
+    const_symtab_iterator<T>::operator++();
+    return tmp;
+  }
+};
 
 template <typename Sym, typename Shdr, typename Ehdr>
 std::ostream& symdump(std::ostream& os, void* base) {
@@ -44,6 +105,8 @@ std::ostream& symdump(std::ostream& os, void* base) {
 
   auto& ehdr = reinterpret_cast<Ehdr&>(buff[0]);
   auto shdr = reinterpret_cast<Shdr*>(&buff[ehdr.e_shoff]);
+
+  os << std::left;
 
   auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
   for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
@@ -53,15 +116,18 @@ std::ostream& symdump(std::ostream& os, void* base) {
 
       auto symtab = reinterpret_cast<Sym*>(&buff[shdr[i].sh_offset]);
       auto strtab = reinterpret_cast<char*>(&buff[shdr[shdr[i].sh_link].sh_offset]);
-
-      for (std::size_t j = 0; j < shdr[i].sh_size / shdr[i].sh_entsize; ++j) {
-        os << &strtab[symtab[j].st_name] << '\n';
+      auto size = shdr[i].sh_size / shdr[i].sh_entsize;
+      
+      symtab_iterator<Sym> first{symtab, strtab}, last{symtab + size, strtab};
+      for (auto iter = first; iter != last; ++iter) {
+        os << (*iter).second << ' ' << (*iter).first << '\n';
       }
       os << '\n';
     }
   }
   os << '\n';
 
+  os << std::right;
   return os;
 }
 
@@ -155,9 +221,11 @@ int main(int argc, char* argv[]) try {
       std::cout << std::hex;
       //memdump(std::cout, buff.data(), 16);
       if (buff[EI_CLASS] == ELFCLASS64) {
-        gnuhash_dump<std::uint64_t, Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
+        symdump<Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
+        //gnuhash_dump<std::uint64_t, Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
       } else if (buff[EI_CLASS] == ELFCLASS32) {
-        gnuhash_dump<std::uint32_t, Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
+        symdump<Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
+        //gnuhash_dump<std::uint32_t, Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
       } else {
         std::cerr << "the ELF class is invalid\n";
       }
