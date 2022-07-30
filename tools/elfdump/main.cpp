@@ -43,61 +43,64 @@ std::ostream& operator<<(std::ostream& os, const Elf64_Sym& sym) {
   return os;
 }
 
-template <typename T>
-class const_symtab_iterator {
- public:
-  using value_type = std::pair<const char*, const T&>;
-  using difference_type = std::uint64_t;
-  using pointer = const T*;
-  using reference = const T&;
+std::ostream& operator<<(std::ostream& os, const Elf32_Verdef& verdef) {
+  os << "version: " << std::setw(4) << verdef.vd_version;
+  os << "flags: " << std::setw(4) << verdef.vd_flags;
+  os << "ndx: " << std::setw(4) << verdef.vd_ndx;
+  os << "cnt: " << std::setw(4) << verdef.vd_cnt;
+  os << "hash: " << std::setw(8) << verdef.vd_hash;
+  os << "aux: " << std::setw(4) << verdef.vd_aux;
+  os << "next: " << std::setw(4) << verdef.vd_next;
+  return os;
+}
 
-  const_symtab_iterator(T* symtab, char* strtab) noexcept : sym_{symtab}, strtab_{strtab} {}
+std::ostream& operator<<(std::ostream& os, const Elf64_Verdef& verdef) {
+  os << "version: " << std::setw(4) << verdef.vd_version;
+  os << "flags: " << std::setw(4) << verdef.vd_flags;
+  os << "ndx: " << std::setw(4) << verdef.vd_ndx;
+  os << "cnt: " << std::setw(4) << verdef.vd_cnt;
+  os << "hash: " << std::setw(8) << verdef.vd_hash;
+  os << "aux: " << std::setw(4) << verdef.vd_aux;
+  os << "next: " << std::setw(4) << verdef.vd_next;
+  return os;
+}
 
-  constexpr value_type operator*() const noexcept { return {&strtab_[sym_->st_name], *sym_}; }
-  constexpr pointer operator->() const noexcept { return sym_; }
+std::ostream& operator<<(std::ostream& os, const Elf32_Verneed& verneed) {
+  os << "version: " << std::setw(4) << verneed.vn_version;
+  os << "cnt: " << std::setw(4) << verneed.vn_cnt;
+  os << "file: " << std::setw(6) << verneed.vn_file;
+  os << "aux: " << std::setw(4) << verneed.vn_aux;
+  os << "next: " << std::setw(4) << verneed.vn_next;
+  return os;
+}
 
-  const_symtab_iterator& operator++() noexcept {
-    ++sym_;
-    return *this;
-  }
+std::ostream& operator<<(std::ostream& os, const Elf64_Verneed& verneed) {
+  os << "version: " << std::setw(4) << verneed.vn_version;
+  os << "cnt: " << std::setw(4) << verneed.vn_cnt;
+  os << "file: " << std::setw(6) << verneed.vn_file;
+  os << "aux: " << std::setw(4) << verneed.vn_aux;
+  os << "next: " << std::setw(4) << verneed.vn_next;
+  return os;
+}
 
-  const_symtab_iterator operator++(int) noexcept {
-    const_symtab_iterator tmp = *this;
-    ++*this;
-    return tmp;
-  }
+std::ostream& operator<<(std::ostream& os, const Elf32_Vernaux& vernaux) {
+  os << "hash: " << std::setw(8) << vernaux.vna_hash;
+  os << "flags: " << std::setw(4) << vernaux.vna_flags;
+  os << "other: " << std::setw(4) << vernaux.vna_other;
+  os << "name: " << std::setw(6) << vernaux.vna_name;
+  os << "next: " << std::setw(4) << vernaux.vna_next;
+  return os;
+}
 
-  constexpr bool operator!=(const_symtab_iterator& rhs) const noexcept { return rhs.sym_ != sym_; }
 
- private:
-  T* sym_;
-  char* strtab_;
-};
-
-template <typename T>
-class symtab_iterator : public const_symtab_iterator<T> {
- public:
-  using value_type = std::pair<char*, T&>;
-  using difference_type = std::uint64_t;
-  using pointer = T*;
-  using reference = T&;
-
-  using const_symtab_iterator<T>::const_symtab_iterator;
-
-  constexpr value_type operator*() const noexcept { return {const_cast<char*>(const_symtab_iterator<T>::operator*().first), const_cast<reference>(const_symtab_iterator<T>::operator*().second)}; }
-  constexpr pointer operator->() const noexcept { return this->_Ptr; }
-
-  constexpr symtab_iterator& operator++() noexcept {
-    const_symtab_iterator<T>::operator++();
-    return *this;
-  }
-
-  constexpr symtab_iterator operator++(int) noexcept {
-    symtab_iterator tmp = *this;
-    const_symtab_iterator<T>::operator++();
-    return tmp;
-  }
-};
+std::ostream& operator<<(std::ostream& os, const Elf64_Vernaux& vernaux) {
+  os << "hash: " << std::setw(8) << vernaux.vna_hash;
+  os << "flags: " << std::setw(4) << vernaux.vna_flags;
+  os << "other: " << std::setw(4) << vernaux.vna_other;
+  os << "name: " << std::setw(6) << vernaux.vna_name;
+  os << "next: " << std::setw(4) << vernaux.vna_next;
+  return os;
+}
 
 template <typename Sym, typename Shdr, typename Ehdr>
 std::ostream& symdump(std::ostream& os, void* base) {
@@ -110,17 +113,15 @@ std::ostream& symdump(std::ostream& os, void* base) {
 
   auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
   for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
-    if (shdr[i].sh_type == SHT_SYMTAB/* || shdr[i].sh_type == SHT_DYNSYM*/) {
+    if (/*shdr[i].sh_type == SHT_SYMTAB ||*/shdr[i].sh_type == SHT_DYNSYM) {
       os << &shstrtab[shdr[i].sh_name] << '\n';
       // os << &shstrtab[shdr[shdr[i].sh_link].sh_name] << '\n';
 
       auto symtab = reinterpret_cast<Sym*>(&buff[shdr[i].sh_offset]);
       auto strtab = reinterpret_cast<char*>(&buff[shdr[shdr[i].sh_link].sh_offset]);
-      auto size = shdr[i].sh_size / shdr[i].sh_entsize;
       
-      symtab_iterator<Sym> first{symtab, strtab}, last{symtab + size, strtab};
-      for (auto iter = first; iter != last; ++iter) {
-        os << (*iter).second << ' ' << (*iter).first << '\n';
+      for (std::size_t j = 0; j < shdr[i].sh_size / shdr[i].sh_entsize; ++j) {
+        os << symtab[j] << ' ' << &strtab[symtab[j].st_name] << '\n';
       }
       os << '\n';
     }
@@ -207,6 +208,123 @@ std::ostream& gnuhash_dump(std::ostream& os, void* base) {
   return os;
 }
 
+// Reference: https://lists.debian.org/lsb-spec/1999/12/msg00017.html
+template <typename Verdaux, typename Verdef, typename Shdr, typename Ehdr>
+std::ostream& verddump(std::ostream& os, void* base) {
+  auto buff = static_cast<std::uint8_t*>(base);
+
+  auto& ehdr = reinterpret_cast<Ehdr&>(buff[0]);
+  auto shdr = reinterpret_cast<Shdr*>(&buff[ehdr.e_shoff]);
+
+  os << std::left;
+
+  auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
+  for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
+    if (shdr[i].sh_type == SHT_GNU_verdef) {
+      os << &shstrtab[shdr[i].sh_name] << '\n';
+
+      auto ptr = &buff[shdr[i].sh_offset];
+      auto dynstr = reinterpret_cast<char*>(&buff[shdr[shdr[i].sh_link].sh_offset]);
+
+      for (Verdef* iter;; ptr += iter->vd_next) {
+        iter = reinterpret_cast<Verdef*>(ptr);
+
+        os << *iter << '\t';
+
+        auto p = &ptr[iter->vd_aux];
+        for (std::size_t j = 0; j < iter->vd_cnt; ++j) {
+          auto& verdaux = reinterpret_cast<Verdaux&>(*p);
+          os << &dynstr[verdaux.vda_name] << '\t';
+          p += verdaux.vda_next;
+        }
+        os << '\n';
+
+        if (!iter->vd_next) {
+          break;
+        }
+      }
+    }
+  }
+  os << std::right;
+  return os;
+}
+
+template <typename Vernaux, typename Verneed, typename Shdr, typename Ehdr>
+std::ostream& verndump(std::ostream& os, void* base) {
+  auto buff = static_cast<std::uint8_t*>(base);
+
+  auto& ehdr = reinterpret_cast<Ehdr&>(buff[0]);
+  auto shdr = reinterpret_cast<Shdr*>(&buff[ehdr.e_shoff]);
+
+  os << std::left;
+
+  auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
+  for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
+    if (shdr[i].sh_type == SHT_GNU_verneed) {
+      os << &shstrtab[shdr[i].sh_name] << '\n';
+
+      auto ptr = &buff[shdr[i].sh_offset];
+      auto dynstr = reinterpret_cast<char*>(&buff[shdr[shdr[i].sh_link].sh_offset]);
+
+      for (Verneed* iter;; ptr += iter->vn_next) {
+        iter = reinterpret_cast<Verneed*>(ptr);
+
+        os << *iter << &dynstr[iter->vn_file] << '\n';
+
+        auto p = &ptr[iter->vn_aux];
+        for (std::size_t j = 0; j < iter->vn_cnt; ++j) {
+          auto& vernaux = reinterpret_cast<Vernaux&>(*p);
+          os << vernaux << &dynstr[vernaux.vna_name] << '\n';
+          p += vernaux.vna_next;
+        }
+        os << '\n';
+
+        if (!iter->vn_next) {
+          break;
+        }
+      }
+    }
+  }
+  os << std::right;
+  return os;
+}
+
+template <typename Vernaux, typename Sym, typename Shdr, typename Ehdr>
+std::ostream& symdump(std::ostream& os, void* base) {
+  auto buff = static_cast<std::uint8_t*>(base);
+
+  auto& ehdr = reinterpret_cast<Ehdr&>(buff[0]);
+  auto shdr = reinterpret_cast<Shdr*>(&buff[ehdr.e_shoff]);
+
+  os << std::left;
+  
+  auto shstrtab = reinterpret_cast<char*>(&buff[shdr[ehdr.e_shstrndx].sh_offset]);
+  for (std::size_t i = 0; i < ehdr.e_shnum; ++i) {
+    if (shdr[i].sh_type == SHT_GNU_versym) {
+      os << &shstrtab[shdr[i].sh_name] << '\n';
+      os << &shstrtab[shdr[shdr[i].sh_link].sh_name] << '\n';
+      os << &shstrtab[shdr[shdr[shdr[i].sh_link].sh_link].sh_name] << '\n';
+
+      auto versym = reinterpret_cast<decltype(Vernaux::vna_other)*>(&buff[shdr[i].sh_offset]);
+      auto dynsym = reinterpret_cast<Sym*>(&buff[shdr[shdr[i].sh_link].sh_offset]);
+      auto dynstr = reinterpret_cast<char*>(&buff[shdr[shdr[shdr[i].sh_link].sh_link].sh_offset]);
+      
+      for (std::size_t j = 0; j < shdr[i].sh_size / shdr[i].sh_entsize; ++j) {  // size of versym and dynsym are equal.
+        if (dynsym[j].st_value) {
+          os << dynsym[j] << ' ' << &dynstr[dynsym[j].st_name] << ", ver(def): " << (versym[j] & 0x7fff) << '\n';
+        } else {
+          os << dynsym[j] << ' ' << &dynstr[dynsym[j].st_name] << ", ver(need): " << (versym[j] & 0x7fff) << '\n';
+        }
+      }
+      os << '\n';
+    }
+  }
+  os << '\n';
+
+  os << std::right;
+  return os;
+}
+
 int main(int argc, char* argv[]) try {
   if (argc < 2) {
     std::cerr << argv[0] << " Version " << BINLAB_VERSION_MAJOR << '.' << BINLAB_VERSION_MINOR << '\n';
@@ -221,11 +339,14 @@ int main(int argc, char* argv[]) try {
       std::cout << std::hex;
       //memdump(std::cout, buff.data(), 16);
       if (buff[EI_CLASS] == ELFCLASS64) {
-        symdump<Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
+        symdump<Elf64_Vernaux, Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
         //gnuhash_dump<std::uint64_t, Elf64_Sym, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
+        verddump<Elf64_Verdaux, Elf64_Verdef, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
+        verndump<Elf64_Vernaux, Elf64_Verneed, Elf64_Shdr, Elf64_Ehdr>(std::cout, buff.data());
       } else if (buff[EI_CLASS] == ELFCLASS32) {
-        symdump<Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
+        //symdump<Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
         //gnuhash_dump<std::uint32_t, Elf32_Sym, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
+        //verddump<Elf32_Verdaux, Elf32_Verdef, Elf32_Shdr, Elf32_Ehdr>(std::cout, buff.data());
       } else {
         std::cerr << "the ELF class is invalid\n";
       }
