@@ -2,6 +2,7 @@
 
 add_executable(elfdump
   main.cpp
+  elf_stream.cpp
 )
 
 target_include_directories(elfdump
