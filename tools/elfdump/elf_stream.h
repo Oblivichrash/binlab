@@ -1,5 +1,8 @@
 //
 
+#ifndef BINLAB_ELF_STREAM_H_
+#define BINLAB_ELF_STREAM_H_
+
 #include <elf.h>
 
 #include <iosfwd>
@@ -15,3 +18,5 @@ std::ostream& operator<<(std::ostream& os, const Elf64_Verneed& verneed);
 
 std::ostream& operator<<(std::ostream& os, const Elf32_Vernaux& vernaux);
 std::ostream& operator<<(std::ostream& os, const Elf64_Vernaux& vernaux);
+
+#endif  // !BINLAB_ELF_STREAM_H_

@@ -1,5 +1,8 @@
 // iterator_facade.h:
 
+#ifndef BINLAB_ITERATOR_FACADE_H_
+#define BINLAB_ITERATOR_FACADE_H_
+
 #include <cstddef>
 #include <memory>
 #include <type_traits>
@@ -99,3 +102,5 @@ class iterator_facade {
   Derived& derived() { return *static_cast<Derived*>(this); }
   const Derived& derived() const { return *static_cast<const Derived*>(this); }
 };
+
+#endif  // !BINLAB_ITERATOR_FACADE_H_
