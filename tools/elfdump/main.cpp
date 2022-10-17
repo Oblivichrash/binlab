@@ -15,6 +15,8 @@
 #include "elf_stream.h"
 #include "iterator_facade.h"
 
+#include "versioning.h"
+
 #ifdef __BIONIC__
 #define SHT_GNU_HASH    0x6ffffff6
 #define SHT_GNU_versym  0x6fffffff
@@ -41,6 +43,18 @@ std::ostream& vddump(std::ostream& os, Verdef* verdef, const char* dynstr) {
   return os;
 }
 
+// template <typename Verdaux, typename Verdef>
+// std::ostream& vddump(std::ostream& os, Verdef* verdef, const char* dynstr) {
+//   for (auto vd = verdef_iterator{verdef}; vd != nullptr; ++vd) {
+//     os << *vd;
+//     for (auto vda = const_verdaux_iterator{reinterpret_cast<Verdaux*>(reinterpret_cast<std::size_t>(std::addressof(*vd)) + vd->vd_aux)}; vda != nullptr; ++vda) {
+//       os << '\t' << &dynstr[vda->vda_name];
+//     }
+//     os << '\n';
+//   }
+//   return os;
+// }
+
 template <typename Vernaux, typename Verneed>
 std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
   for (auto vn = verneed; vn; vn = reinterpret_cast<Verneed*>(reinterpret_cast<char*>(vn) + vn->vn_next)) {
@@ -59,10 +73,21 @@ std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
   return os;
 }
 
+// template <typename Vernaux, typename Verneed>
+// std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
+//   for (auto vn = const_verneed_iterator{verneed}; vn != nullptr; ++vn) {
+//     os << *vn << &dynstr[vn->vn_file] << '\n';
+//     for (auto vna = const_vernaux_iterator{reinterpret_cast<Vernaux*>(reinterpret_cast<std::size_t>(std::addressof(*vn)) + vn->vn_aux)}; vna != nullptr; ++vna) {
+//       os << *vna << &dynstr[vna->vna_name] << '\n';
+//     }
+//     os << '\n';
+//   }
+//   return os;
+// }
+
 template <typename Verdaux, typename Verdef, typename Size>
 Verdaux* find_vda(Verdef* vd, Size ndx) {
-  for (auto ptr = reinterpret_cast<char*>(vd); ptr; ptr += vd->vd_next) {
-    vd = reinterpret_cast<Verdef*>(ptr);
+  for (auto ptr = reinterpret_cast<char*>(vd); (vd = reinterpret_cast<Verdef*>(ptr)); ptr += vd->vd_next) {
     if (vd->vd_ndx == ndx) {
       return reinterpret_cast<Verdaux*>(ptr + vd->vd_aux);
     }
@@ -75,8 +100,7 @@ Verdaux* find_vda(Verdef* vd, Size ndx) {
 
 template <typename Vernaux, typename Verneed, typename Size>
 Vernaux* find_vna(Verneed* vn, Size ndx) {
-  for (auto ptr1 = reinterpret_cast<char*>(vn); ptr1; ptr1 += vn->vn_next) {
-    vn = reinterpret_cast<Verneed*>(ptr1);
+  for (auto ptr1 = reinterpret_cast<char*>(vn); (vn = reinterpret_cast<Verneed*>(ptr1)); ptr1 += vn->vn_next) {
     Vernaux* vna;
     for (auto ptr2 = ptr1 + vn->vn_aux;; ptr2 += vna->vna_next) {
       vna = reinterpret_cast<Vernaux*>(ptr2);
@@ -360,6 +384,7 @@ std::ostream& ph_sym_dump(std::ostream& os, char* base, Dyn* dyn, Phdr* first, P
   if (verneed) {
     vndump<Vernaux>(os, verneed, strtab) << '\n';
   }
+  return os;
 
   if (gnu_hash) {
     gnu_hash_dump<Verdaux, Verdef, Vernaux, Verneed, Bloom>(os, verdef, verneed, versym, gnu_hash, symtab, strtab);
