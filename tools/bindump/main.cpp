@@ -1,5 +1,6 @@
 // tools/bindump/main.cpp: Dump Binary files
 
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -7,212 +8,407 @@
 #include "binlab/Config/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
-//#include "pedump.h"
-//#include "elfdump.h"
+
+using namespace binlab::COFF;
+using namespace binlab::ELF;
 
 namespace binlab {
 
-enum class address_mode { kFile, kVirtual };
+template <typename Section>
+struct section_traits;
 
-template <typename Section, address_mode mode>
-struct section_traits {};
+template <>
+struct section_traits<Elf64_Phdr> {
+  using value_type              = Elf64_Phdr;
+  using size_type               = decltype(value_type::p_memsz);
+  using offset_type             = decltype(value_type::p_offset);
+  using address_type            = decltype(value_type::p_vaddr);
 
-template <typename Header, typename SectionTraits>
-struct header_traits {};
-
-namespace COFF {
-
-template <typename Section, address_mode mode>
-struct section_traits : private binlab::section_traits<Section, mode> {
-  using value_type              = Section;
-  using size_type               = decltype(Section::SizeOfRawData);
-  using address_type            = decltype(Section::VirtualAddress);
-
-  [[nodiscard]] static constexpr auto offset(const Section& header) noexcept {
-    if constexpr (mode == address_mode::kFile) {
-      return header.PointerToRawData;
-    } else {
-      return header.VirtualAddress;
-    }
+  [[nodiscard]] static constexpr auto memory_offset(const value_type& section) {
+    return section.p_vaddr;
+  }
+  [[nodiscard]] static constexpr auto memory_size(const value_type& section) {
+    return section.p_memsz;
   }
 
-  [[nodiscard]] static constexpr auto size(const Section& header) noexcept {
-    if constexpr (mode == address_mode::kFile) {
-      return header.Misc.VirtualSize;
-    } else {
-      return header.SizeOfRawData;
-    }
+  [[nodiscard]] static constexpr auto file_offset(const value_type& section) {
+    return section.p_offset;
   }
-
-  [[nodiscard]] static constexpr bool contains(const Section& header, const address_type& address) noexcept {
-    return offset(header) <= address && address < offset(header) + size(header);
-  }
-
-  template <typename Header>
-  [[nodiscard]] static constexpr auto first(const Header& header) noexcept {
-    auto address = reinterpret_cast<std::size_t>(&header) + offsetof(Header, OptionalHeader) + header.FileHeader.SizeOfOptionalHeader;
-    return reinterpret_cast<Section*>(address);
-  }
-
-  template <typename Header>
-  [[nodiscard]] static constexpr auto count(const Header& header) noexcept {
-    return header.FileHeader.NumberOfSections;
+  [[nodiscard]] static constexpr auto file_size(const value_type& section) {
+    return section.p_filesz;
   }
 };
 
-template <typename Header, typename SectionTraits>
-struct header_traits : private binlab::header_traits<Header, SectionTraits> {
-  using size_type               = decltype(decltype(Header::FileHeader)::NumberOfSections);
+template <>
+struct section_traits<Elf32_Phdr> {
+  using value_type              = Elf32_Phdr;
+  using size_type               = decltype(value_type::p_memsz);
+  using offset_type             = decltype(value_type::p_offset);
+  using address_type            = decltype(value_type::p_vaddr);
 
-  using section_iterator        = typename SectionTraits::value_type*;
+  [[nodiscard]] static constexpr auto memory_offset(const value_type& section) {
+    return section.p_vaddr;
+  }
+  [[nodiscard]] static constexpr auto memory_size(const value_type& section) {
+    return section.p_memsz;
+  }
 
-  [[nodiscard]] static constexpr bool check_magic(const Header& header) noexcept {
+  [[nodiscard]] static constexpr auto file_offset(const value_type& section) {
+    return section.p_offset;
+  }
+  [[nodiscard]] static constexpr auto file_size(const value_type& section) {
+    return section.p_filesz;
+  }
+};
+
+template <>
+struct section_traits<Elf64_Shdr> {
+  using value_type              = Elf64_Shdr;
+  using size_type               = decltype(value_type::sh_size);
+  using offset_type             = decltype(value_type::sh_offset);
+  using address_type            = decltype(value_type::sh_addr);
+
+  [[nodiscard]] static constexpr auto memory_offset(const value_type& section) {
+    return section.sh_addr;
+  }
+  [[nodiscard]] static constexpr auto memory_size(const value_type& section) {
+    return section.sh_size;
+  }
+
+  [[nodiscard]] static constexpr auto file_offset(const value_type& section) {
+    return section.sh_offset;
+  }
+  [[nodiscard]] static constexpr auto file_size(const value_type& section) {
+    return section.sh_size;
+  }
+};
+
+template <>
+struct section_traits<Elf32_Shdr> {
+  using value_type              = Elf32_Shdr;
+  using size_type               = decltype(value_type::sh_size);
+  using offset_type             = decltype(value_type::sh_offset);
+  using address_type            = decltype(value_type::sh_addr);
+
+  [[nodiscard]] static constexpr auto memory_offset(const value_type& section) {
+    return section.sh_addr;
+  }
+  [[nodiscard]] static constexpr auto memory_size(const value_type& section) {
+    return section.sh_size;
+  }
+
+  [[nodiscard]] static constexpr auto file_offset(const value_type& section) {
+    return section.sh_offset;
+  }
+  [[nodiscard]] static constexpr auto file_size(const value_type& section) {
+    return section.sh_size;
+  }
+};
+
+template <>
+struct section_traits<IMAGE_SECTION_HEADER> {
+  using value_type              = IMAGE_SECTION_HEADER;
+  using size_type               = decltype(value_type::SizeOfRawData);
+  using offset_type             = decltype(value_type::PointerToRawData);
+  using address_type            = decltype(value_type::VirtualAddress);
+
+  [[nodiscard]] static constexpr auto memory_offset(const value_type& section) {
+    return section.VirtualAddress;
+  }
+  [[nodiscard]] static constexpr auto memory_size(const value_type& section) {
+    return section.Misc.VirtualSize;
+  }
+
+  [[nodiscard]] static constexpr auto file_offset(const value_type& section) {
+    return section.PointerToRawData;
+  }
+  [[nodiscard]] static constexpr auto file_size(const value_type& section) {
+    return section.SizeOfRawData;
+  }
+};
+
+enum class address_mode { file, memory };
+
+template <address_mode mode>
+class address_policy;
+
+template <>
+class address_policy<address_mode::memory> {
+ public:
+  template <typename Section, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr auto offset(const Section& header) noexcept {
+    return Traits::memory_offset(header);
+  }
+
+  template <typename Section, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr auto count(const Section& header) noexcept {
+    return Traits::memory_size(header);
+  }
+
+  template <typename Section, typename Address, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr bool contains(const Section& header, const Address& address) noexcept {
+    return offset(header) <= address && address < (offset(header) + count(header));
+  }
+};
+
+template <>
+class address_policy<address_mode::file> {
+ public:
+  template <typename Section, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr auto offset(const Section& header) noexcept {
+    return Traits::file_offset(header);
+  }
+
+  template <typename Section, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr auto count(const Section& header) noexcept {
+    return Traits::file_size(header);
+  }
+
+  template <typename Section, typename Address, typename Traits = section_traits<Section>>
+  [[nodiscard]] static constexpr bool contains(const Section& header, const Address& address) noexcept {
+    return offset(header) <= address && address < (offset(header) + count(header));
+  }
+};
+
+template <typename Header, typename Section>
+struct header_traits;
+
+template <>
+struct header_traits<Elf64_Ehdr, Elf64_Phdr> {
+  using traits                  = section_traits<Elf64_Phdr>;
+
+  using header_type             = Elf64_Ehdr;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
+    return std::equal(&header.e_ident[EI_MAG0], &header.e_ident[EI_MAG0] + SELFMAG, ELFMAG);
+  }
+
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.e_ident[EI_CLASS] == ELFCLASS64;
+  }
+
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.e_phnum;
+  }
+
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + header.e_phoff;
+    return reinterpret_cast<section_type*>(address);
+  }
+
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
+  }
+};
+
+template <>
+struct header_traits<Elf32_Ehdr, Elf32_Phdr> {
+  using traits                  = section_traits<Elf32_Phdr>;
+
+  using header_type             = Elf32_Ehdr;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
+    return std::equal(&header.e_ident[EI_MAG0], &header.e_ident[EI_MAG0] + SELFMAG, ELFMAG);
+  }
+
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.e_ident[EI_CLASS] == ELFCLASS32;
+  }
+
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.e_phnum;
+  }
+
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + header.e_phoff;
+    return reinterpret_cast<section_type*>(address);
+  }
+
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
+  }
+};
+
+template <>
+struct header_traits<Elf64_Ehdr, Elf64_Shdr> {
+  using traits                  = section_traits<Elf64_Shdr>;
+
+  using header_type             = Elf64_Ehdr;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
+    return std::equal(&header.e_ident[EI_MAG0], &header.e_ident[EI_MAG0] + SELFMAG, ELFMAG);
+  }
+
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.e_ident[EI_CLASS] == ELFCLASS64;
+  }
+
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.e_shnum;
+  }
+
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + header.e_shoff;
+    return reinterpret_cast<section_type*>(address);
+  }
+
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
+  }
+};
+
+template <>
+struct header_traits<Elf32_Ehdr, Elf32_Shdr> {
+  using traits                  = section_traits<Elf32_Shdr>;
+
+  using header_type             = Elf32_Ehdr;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
+    return std::equal(&header.e_ident[EI_MAG0], &header.e_ident[EI_MAG0] + SELFMAG, ELFMAG);
+  }
+
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.e_ident[EI_CLASS] == ELFCLASS32;
+  }
+
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.e_shnum;
+  }
+
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + header.e_shoff;
+    return reinterpret_cast<section_type*>(address);
+  }
+
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
+  }
+};
+
+template <>
+struct header_traits<IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER> {
+  using traits                  = section_traits<IMAGE_SECTION_HEADER>;
+
+  using header_type             = IMAGE_NT_HEADERS64;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
     return header.Signature == IMAGE_NT_SIGNATURE;
   }
 
-  [[nodiscard]] static constexpr auto begin(const Header& header) noexcept {
-    return SectionTraits::first(header);
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
   }
 
-  [[nodiscard]] static constexpr auto size(const Header& header) noexcept {
-    return SectionTraits::count(header);
-  }
-};
-
-}  // namespace COFF
-
-namespace ELF {
-
-template <typename Section, address_mode mode>
-struct section_traits : private binlab::section_traits<Section, mode> {
-  using value_type              = Section;
-  using size_type               = decltype(Section::sh_size);
-  using address_type            = decltype(Section::sh_addr);
-  using offset_type             = decltype(Section::sh_offset);
-
-  [[nodiscard]] static constexpr auto offset(const Section& header) noexcept {
-    if constexpr (mode == address_mode::kFile) {
-      return header.sh_offset;
-    } else {
-      return header.sh_addr;
-    }
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.FileHeader.NumberOfSections;
   }
 
-  [[nodiscard]] static constexpr auto size(const Section& header) noexcept {
-    return header.sh_size;
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + offsetof(header_type, OptionalHeader) + header.FileHeader.SizeOfOptionalHeader;
+    return reinterpret_cast<section_type*>(address);
   }
 
-  [[nodiscard]] static constexpr bool contains(const Section& header, const address_type& address) noexcept {
-    return offset(header) <= address && address < offset(header) + size(header);
-  }
-
-  template <typename Header>
-  [[nodiscard]] static constexpr auto first(const Header& header) noexcept {
-    auto address = reinterpret_cast<std::size_t>(&header) + header.e_shoff;
-    return reinterpret_cast<Section*>(address);
-  }
-
-  template <typename Header>
-  [[nodiscard]] static constexpr auto count(const Header& header) noexcept {
-    return header.e_shnum;
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
   }
 };
 
-template <typename Section, address_mode mode>
-struct segment_traits : private binlab::section_traits<Section, mode> {
-  using value_type              = Section;
-  using size_type               = decltype(Section::p_memsz);
-  using address_type            = decltype(Section::p_vaddr);
-  using offset_type             = decltype(Section::p_offset);
+template <>
+struct header_traits<IMAGE_NT_HEADERS32, IMAGE_SECTION_HEADER> {
+  using traits                  = section_traits<IMAGE_SECTION_HEADER>;
 
-  [[nodiscard]] static constexpr auto offset(const Section& header) noexcept {
-    if constexpr (mode == address_mode::kFile) {
-      return header.p_offset;
-    } else {
-      return header.p_vaddr;
-    }
+  using header_type             = IMAGE_NT_HEADERS32;
+  using section_type            = typename traits::value_type;
+  using size_type               = typename traits::size_type;
+  using offset_type             = typename traits::offset_type;
+  using address_type            = typename traits::address_type;
+
+  [[nodiscard]] static constexpr bool check_magic(const header_type& header) noexcept {
+    return header.Signature == IMAGE_NT_SIGNATURE;
   }
 
-  [[nodiscard]] static constexpr auto size(const Section& header) noexcept {
-    if constexpr (mode == address_mode::kFile) {
-      return header.p_filesz;
-    } else {
-      return header.p_memsz;
-    }
+  [[nodiscard]] static constexpr bool check_class(const header_type& header) noexcept {
+    return header.OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
   }
 
-  [[nodiscard]] static constexpr bool contains(const Section& header, const address_type& address) noexcept {
-    return offset(header) <= address && address < offset(header) + size(header);
+  [[nodiscard]] static constexpr auto count(const header_type& header) noexcept {
+    return header.FileHeader.NumberOfSections;
   }
 
-  template <typename Header>
-  [[nodiscard]] static constexpr auto first(const Header& header) noexcept {
-    auto address = reinterpret_cast<std::size_t>(&header) + header.e_phoff;
-    return reinterpret_cast<Section*>(address);
+  [[nodiscard]] static inline auto begin(const header_type& header) noexcept {
+    auto address = reinterpret_cast<std::size_t>(&header) + offsetof(header_type, OptionalHeader) + header.FileHeader.SizeOfOptionalHeader;
+    return reinterpret_cast<section_type*>(address);
   }
 
-  template <typename Header>
-  [[nodiscard]] static constexpr auto count(const Header& header) noexcept {
-    return header.e_phnum;
+  [[nodiscard]] static inline auto end(const header_type& header) noexcept {
+    return begin(header) + count(header);
   }
 };
 
-template <typename Header, typename SectionTraits>
-struct header_traits : private binlab::header_traits<Header, SectionTraits> {
-  using size_type               = decltype(Header::e_shnum);
-
-  [[nodiscard]] static constexpr bool check_magic(const Header& header) noexcept {
-    return !std::memcmp(&header.e_ident[EI_MAG0], ELFMAG, SELFMAG);
-  }
-
-  [[nodiscard]] static constexpr auto begin(const Header& header) noexcept {
-    return SectionTraits::first(header);
-  }
-
-  [[nodiscard]] static constexpr auto size(const Header& header) noexcept {
-    return SectionTraits::count(header);
-  }
-};
-
-}  // namespace ELF
 }  // namespace binlab
 
 using namespace binlab;
-using namespace COFF;
-using namespace ELF;
 
 std::ostream& coff_dump(std::ostream& os, char* buff) {
-  using traits = COFF::header_traits<IMAGE_NT_HEADERS64, COFF::section_traits<IMAGE_SECTION_HEADER, address_mode::kFile>>;
-
   auto& Dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic != IMAGE_DOS_SIGNATURE) {
     return os << "invalid DOS magic\n";
   }
 
+  using traits = header_traits<IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER>;
   auto& Nt = reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[Dos.e_lfanew]);
-  if (!traits::check_magic(Nt)) {
-    return os << "invalid NT magic\n";
+  if (!traits::check_magic(Nt) || !traits::check_class(Nt)) {
+    return os << "invalid NT type\n";
   }
 
-  auto iter = traits::begin(Nt);
-  for (std::size_t i = 0; i < traits::size(Nt); ++i) {
-    std::cout << iter[i].Name << '\n';
+  auto first = traits::begin(Nt), last = traits::end(Nt);
+  os << std::hex;
+
+  for (auto iter = first; iter != last; ++iter) {
+    if (iter->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
+      os << std::string{reinterpret_cast<char*>(iter->Name), sizeof(iter->Name)} << '\t';
+      os << "offset: " << iter->PointerToRawData << '\t';
+      os << "size: " << iter->SizeOfRawData << '\t';
+      os << "Characteristics: " << iter->Characteristics << '\n';
+    }
   }
+  
   return os;
 }
 
 std::ostream& elf_dump(std::ostream& os, char* buff) {
-  using traits = ELF::header_traits<Elf64_Ehdr, ELF::section_traits<Elf64_Shdr, address_mode::kFile>>;
+  using traits = header_traits<Elf64_Ehdr, Elf64_Shdr>;
 
   auto& ehdr = reinterpret_cast<Elf64_Ehdr&>(buff[0]);
-  if (!traits::check_magic(ehdr)) {
-    return os << "invalid ELF magic\n";
+  if (!traits::check_magic(ehdr) || !traits::check_class(ehdr)) {
+    return os << "invalid ELF type\n";
   }
 
-  auto sections = traits::begin(ehdr);
-  auto shstr = &buff[sections[ehdr.e_shstrndx].sh_offset];
-  for (std::size_t i = 0; i < traits::size(ehdr); ++i) {
-    std::cout << &shstr[sections[i].sh_name] << '\n';
+  auto first = traits::begin(ehdr), last = traits::end(ehdr);
+  auto shstr = &buff[first[ehdr.e_shstrndx].sh_offset];
+
+  for (auto iter = first; iter != last; ++iter) {
+    os << &shstr[iter->sh_name] << '\n';
   }
   return os;
 }
@@ -225,9 +421,9 @@ int main(int argc, char* argv[]) try {
   }
 
   if (std::ifstream is{argv[1], std::ios::binary | std::ios::ate}) {
-    const auto size = static_cast<std::size_t>(is.tellg());
-    std::vector<char> buff(size);
-    if (is.seekg(0, std::ios::beg).read(&buff[0], size)) {
+    const auto count = static_cast<std::size_t>(is.tellg());
+    std::vector<char> buff(count);
+    if (is.seekg(0, std::ios::beg).read(&buff[0], count)) {
       switch (buff[0]) {
         case 'M':
           coff_dump(std::cout, &buff[0]);
