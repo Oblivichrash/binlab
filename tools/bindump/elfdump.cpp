@@ -61,13 +61,13 @@ struct dyn_traits<Elf32_Dyn> {
 
 template <typename T>
 inline std::ostream& operator<<(std::ostream& os, const std::pair<char*, T*>& symbol) {
-  using Traits = sym_traits<T>;
+  using SectionTraits = sym_traits<T>;
 
   const auto& s = *symbol.second;
   os << std::setw(16) << "name: " << symbol.first << '\n';
-  os << std::setw(16) << "bind: " << std::showbase << Traits::bind(s) << '\n';
-  os << std::setw(16) << "type: " << std::showbase << Traits::type(s) << '\n';
-  os << std::setw(16) << "visibility: " << std::showbase << Traits::visibility(s) << '\n';
+  os << std::setw(16) << "bind: " << std::showbase << SectionTraits::bind(s) << '\n';
+  os << std::setw(16) << "type: " << std::showbase << SectionTraits::type(s) << '\n';
+  os << std::setw(16) << "visibility: " << std::showbase << SectionTraits::visibility(s) << '\n';
   os << std::setw(16) << "shndx: " << std::showbase << s.st_shndx << '\n';
   os << std::setw(16) << "value: " << std::showbase << s.st_value << '\n';
   os << std::setw(16) << "size: " << std::showbase << s.st_size;
@@ -145,7 +145,7 @@ void DumpDynamic(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   if (hash) {
     sysv_hash_table table{symtab, strtab, hash};
     for (size_t i = 0; i < table.bucket_count(); i++) {
-      for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
+      for (auto iter = table.first(i); iter != table.end(i); ++iter) {
         auto name = &strtab[iter->st_name];
         std::cout << std::setw(4) << i << std::setw(9) << table.hash_value(name) << ' ' << name << '\n';
       }
@@ -164,7 +164,7 @@ void DumpDynamic(Accessor<Elf_Phdr>& base, Elf_Dyn* dyn) {
   if (gnu_hash) {
     gun_hash_table table{symtab, strtab, gnu_hash};
     for (size_t i = 0; i < table.bucket_count(); i++) {
-      for (auto iter = table.begin(i); iter != table.end(i); ++iter) {
+      for (auto iter = table.first(i); iter != table.end(i); ++iter) {
         auto name = &strtab[iter->st_name];
         std::cout << std::setw(4) << i << std::setw(9) << table.hash_value(name) << ' ' << name << '\n';
       }

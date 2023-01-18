@@ -25,65 +25,65 @@
 #endif // !__BIONIC__
 
 // Reference: https://lists.debian.org/lsb-spec/1999/12/msg00017.html
+//template <typename Verdaux, typename Verdef>
+//std::ostream& vddump(std::ostream& os, Verdef* verdef, const char* dynstr) {
+//  for (auto vd = verdef; vd; vd = reinterpret_cast<Verdef*>(reinterpret_cast<char*>(vd) + vd->vd_next)) {
+//    os << *vd;
+//    for (auto vda = reinterpret_cast<Verdaux*>(reinterpret_cast<char*>(vd) + vd->vd_aux);; vda = reinterpret_cast<Verdaux*>(reinterpret_cast<char*>(vda) + vda->vda_next)) {
+//      os << '\t' << &dynstr[vda->vda_name];
+//      if (!vda->vda_next) {
+//        break;
+//      }
+//    }
+//    os << '\n';
+//    if (!vd->vd_next) {
+//      break;
+//    }
+//  }
+//  return os;
+//}
+
 template <typename Verdaux, typename Verdef>
 std::ostream& vddump(std::ostream& os, Verdef* verdef, const char* dynstr) {
-  for (auto vd = verdef; vd; vd = reinterpret_cast<Verdef*>(reinterpret_cast<char*>(vd) + vd->vd_next)) {
+  for (auto vd = verdef_iterator{verdef}; vd != nullptr; ++vd) {
     os << *vd;
-    for (auto vda = reinterpret_cast<Verdaux*>(reinterpret_cast<char*>(vd) + vd->vd_aux);; vda = reinterpret_cast<Verdaux*>(reinterpret_cast<char*>(vda) + vda->vda_next)) {
+    for (auto vda = const_verdaux_iterator{reinterpret_cast<Verdaux*>(reinterpret_cast<std::size_t>(std::addressof(*vd)) + vd->vd_aux)}; vda != nullptr; ++vda) {
       os << '\t' << &dynstr[vda->vda_name];
-      if (!vda->vda_next) {
-        break;
-      }
     }
     os << '\n';
-    if (!vd->vd_next) {
-      break;
-    }
   }
   return os;
 }
 
-// template <typename Verdaux, typename Verdef>
-// std::ostream& vddump(std::ostream& os, Verdef* verdef, const char* dynstr) {
-//   for (auto vd = verdef_iterator{verdef}; vd != nullptr; ++vd) {
-//     os << *vd;
-//     for (auto vda = const_verdaux_iterator{reinterpret_cast<Verdaux*>(reinterpret_cast<std::size_t>(std::addressof(*vd)) + vd->vd_aux)}; vda != nullptr; ++vda) {
-//       os << '\t' << &dynstr[vda->vda_name];
-//     }
-//     os << '\n';
-//   }
-//   return os;
-// }
+//template <typename Vernaux, typename Verneed>
+//std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
+//  for (auto vn = verneed; vn; vn = reinterpret_cast<Verneed*>(reinterpret_cast<char*>(vn) + vn->vn_next)) {
+//    os << *vn << &dynstr[vn->vn_file] << '\n';
+//    for (auto vna = reinterpret_cast<Vernaux*>(reinterpret_cast<char*>(vn) + vn->vn_aux);; vna = reinterpret_cast<Vernaux*>(reinterpret_cast<char*>(vna) + vna->vna_next)) {
+//      os << *vna << &dynstr[vna->vna_name] << '\n';
+//      if (!vna->vna_next) {
+//        break;
+//      }
+//    }
+//    os << '\n';
+//    if (!vn->vn_next) {
+//      break;
+//    }
+//  }
+//  return os;
+//}
 
 template <typename Vernaux, typename Verneed>
 std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
-  for (auto vn = verneed; vn; vn = reinterpret_cast<Verneed*>(reinterpret_cast<char*>(vn) + vn->vn_next)) {
+  for (auto vn = const_verneed_iterator{verneed}; vn != nullptr; ++vn) {
     os << *vn << &dynstr[vn->vn_file] << '\n';
-    for (auto vna = reinterpret_cast<Vernaux*>(reinterpret_cast<char*>(vn) + vn->vn_aux);; vna = reinterpret_cast<Vernaux*>(reinterpret_cast<char*>(vna) + vna->vna_next)) {
+    for (auto vna = const_vernaux_iterator{reinterpret_cast<Vernaux*>(reinterpret_cast<std::size_t>(std::addressof(*vn)) + vn->vn_aux)}; vna != nullptr; ++vna) {
       os << *vna << &dynstr[vna->vna_name] << '\n';
-      if (!vna->vna_next) {
-        break;
-      }
     }
     os << '\n';
-    if (!vn->vn_next) {
-      break;
-    }
   }
   return os;
 }
-
-// template <typename Vernaux, typename Verneed>
-// std::ostream& vndump(std::ostream& os, Verneed* verneed, const char* dynstr) {
-//   for (auto vn = const_verneed_iterator{verneed}; vn != nullptr; ++vn) {
-//     os << *vn << &dynstr[vn->vn_file] << '\n';
-//     for (auto vna = const_vernaux_iterator{reinterpret_cast<Vernaux*>(reinterpret_cast<std::size_t>(std::addressof(*vn)) + vn->vn_aux)}; vna != nullptr; ++vna) {
-//       os << *vna << &dynstr[vna->vna_name] << '\n';
-//     }
-//     os << '\n';
-//   }
-//   return os;
-// }
 
 template <typename Verdaux, typename Verdef, typename Size>
 Verdaux* find_vda(Verdef* vd, Size ndx) {

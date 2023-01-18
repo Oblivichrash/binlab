@@ -62,11 +62,11 @@ std::ostream& operator<<(std::ostream& os, const IMAGE_IMPORT_DESCRIPTOR& descri
 
 template <typename ThunkData>
 void Dump(const accessor& base, const ThunkData* thunk) {
-  using Traits = thunk_data_traits<ThunkData>;
+  using SectionTraits = thunk_data_traits<ThunkData>;
 
   for (auto iter = thunk; iter->u1.AddressOfData; ++iter) {
-    if (Traits::snap_by_ordinal(*iter)) {
-      std::cout << std::setw(6) << Traits::ordinal(*iter);
+    if (SectionTraits::snap_by_ordinal(*iter)) {
+      std::cout << std::setw(6) << SectionTraits::ordinal(*iter);
     } else {
       auto& ordinal = reinterpret_cast<const IMAGE_IMPORT_BY_NAME&>(base[iter->u1.AddressOfData]);
       std::cout << std::setw(6) << ordinal.Hint << ": " << ordinal.Name;

@@ -126,8 +126,8 @@ class sysv_hash_table {
   }
 
   // iterators
-  constexpr iterator begin() noexcept { return first_; }
-  constexpr const_iterator begin() const noexcept { return first_; }
+  constexpr iterator first() noexcept { return first_; }
+  constexpr const_iterator first() const noexcept { return first_; }
   constexpr iterator end() noexcept { return last_; }
   constexpr const_iterator end() const noexcept { return last_; }
 
@@ -137,7 +137,7 @@ class sysv_hash_table {
   // set operations
   constexpr const_iterator find(const char* k) const noexcept {
     auto n = hash_value(k) % bucket_count();
-    for (auto iter = begin(n); iter != end(n); ++iter) {
+    for (auto iter = first(n); iter != end(n); ++iter) {
       if (!std::strcmp(k, &strtab_[iter->st_name])) {
         return std::pointer_traits<const_iterator>::pointer_to(*iter);
       }
@@ -148,8 +148,8 @@ class sysv_hash_table {
   // bucket interface
   constexpr size_type bucket_count() const noexcept { return hash_[0]; }
   constexpr size_type bucket(const char* k) const noexcept { return hash_value(k) % bucket_count(); }
-  constexpr local_iterator begin(size_type n) noexcept { return {first_, chain_, bucket_[n]}; }
-  constexpr const_local_iterator begin(size_type n) const noexcept { return {first_, chain_, bucket_[n]}; }
+  constexpr local_iterator first(size_type n) noexcept { return {first_, chain_, bucket_[n]}; }
+  constexpr const_local_iterator first(size_type n) const noexcept { return {first_, chain_, bucket_[n]}; }
   constexpr local_iterator end(size_type) noexcept { return {first_, chain_, STN_UNDEF}; }
   constexpr const_local_iterator end(size_type) const noexcept { return {first_, chain_, STN_UNDEF}; }
 
@@ -295,8 +295,8 @@ class gun_hash_table {
   }
 
   // iterators
-  constexpr iterator begin() noexcept { return first_; }
-  constexpr const_iterator begin() const noexcept { return first_; }
+  constexpr iterator first() noexcept { return first_; }
+  constexpr const_iterator first() const noexcept { return first_; }
   constexpr iterator end() noexcept { return last_; }
   constexpr const_iterator end() const noexcept { return last_; }
 
@@ -310,7 +310,7 @@ class gun_hash_table {
       auto n = hash % bucket_count();
       if (bucket_[n] >= symbol_offset()) {
         auto chain = chain_ + bucket_[n] - symbol_offset();
-        for (auto iter = begin(n); iter != end(n); ++iter, ++chain) {
+        for (auto iter = first(n); iter != end(n); ++iter, ++chain) {
           if ((hash | 1) == (*chain | 1) && !std::strcmp(k, &strtab_[iter->st_name])) {
             return iter;
           }
@@ -326,10 +326,10 @@ class gun_hash_table {
     auto hash = hash_value(k);
     return filter(hash) ? hash % bucket_count() : bucket_count();
   }
-  constexpr const_local_iterator begin(size_type n) const noexcept {
+  constexpr const_local_iterator first(size_type n) const noexcept {
     if (n < bucket_count()) {
       if (bucket_[n] < symbol_offset()) {
-        return begin(n + 1);
+        return first(n + 1);
       } else {
         return first_ + bucket_[n];
       }
@@ -337,7 +337,7 @@ class gun_hash_table {
       return last_;
     }
   }
-  constexpr const_local_iterator end(size_type n) const noexcept { return begin(n + 1); }
+  constexpr const_local_iterator end(size_type n) const noexcept { return first(n + 1); }
 
   // hash
   constexpr result_type hash_value(const char* k) const noexcept {
