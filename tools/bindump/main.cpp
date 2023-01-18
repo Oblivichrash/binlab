@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -369,6 +370,90 @@ struct header_traits<IMAGE_NT_HEADERS32, IMAGE_SECTION_HEADER> {
 
 using namespace binlab;
 
+template <typename Ehdr, typename Shdr, typename Traits = header_traits<Ehdr, Shdr>>
+class SectionLE : public Ehdr {
+ public:
+  constexpr explicit operator bool() const noexcept { return Traits::check_magic(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Traits::check_class(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Ehdr::e_ident[EI_DATA] == ELFDATA2LSB; }
+
+  Shdr* begin() noexcept { return reinterpret_cast<Shdr*>(&Ehdr::e_ident[Ehdr::e_shoff]); }
+  const Shdr* begin() const noexcept { return reinterpret_cast<const Shdr*>(&Ehdr::e_ident[Ehdr::e_shoff]); }
+  Shdr* end() noexcept { return begin() + Ehdr::e_shnum; }
+  const Shdr* end() const noexcept { return begin() + Ehdr::e_shnum; }
+
+  char* shstr() noexcept { return reinterpret_cast<char*>(&Ehdr::e_ident[begin()[Ehdr::e_shstrndx].sh_offset]); }
+  const char* shstr() const noexcept { return reinterpret_cast<const char*>(&Ehdr::e_ident[begin()[Ehdr::e_shstrndx].sh_offset]); }
+};
+
+template <typename Ehdr, typename Phdr, typename Traits = header_traits<Ehdr, Phdr>>
+class SegmentLE : public Ehdr {
+ public:
+  constexpr explicit operator bool() const noexcept { return Traits::check_magic(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Traits::check_class(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Ehdr::e_ident[EI_DATA] == ELFDATA2LSB; }
+
+  Phdr* begin() noexcept { return reinterpret_cast<Phdr*>(&Ehdr::e_ident[Ehdr::e_phoff]); }
+  const Phdr* begin() const noexcept { return reinterpret_cast<const Phdr*>(&Ehdr::e_ident[Ehdr::e_phoff]); }
+  Phdr* end() noexcept { return begin() + Ehdr::e_phnum; }
+  const Phdr* end() const noexcept { return begin() + Ehdr::e_phnum; }
+};
+
+template <typename Ehdr, typename Shdr, typename Traits = header_traits<Ehdr, Shdr>>
+std::ostream& operator<<(std::ostream& os, const SectionLE<Ehdr, Shdr>& section) {
+  os << std::setw(9) << "name";
+  os << std::setw(9) << "type";
+  os << std::setw(9) << "flags";
+  os << std::setw(9) << "addr";
+  os << std::setw(9) << "offset";
+  os << std::setw(9) << "size";
+  os << std::setw(9) << "link";
+  os << std::setw(9) << "info";
+  os << std::setw(9) << "align";
+  os << std::setw(9) << "entsize";
+  os << '\n';
+
+  const char* shstr = section.shstr();
+  for (const auto& s : section) {
+    os << std::setw(9) << s.sh_name;
+    os << std::setw(9) << s.sh_type;
+    os << std::setw(9) << s.sh_flags;
+    os << std::setw(9) << s.sh_addr;
+    os << std::setw(9) << s.sh_offset;
+    os << std::setw(9) << s.sh_size;
+    os << std::setw(9) << s.sh_link;
+    os << std::setw(9) << s.sh_info;
+    os << std::setw(9) << s.sh_addralign;
+    os << std::setw(9) << s.sh_entsize;
+    os << ' ' << &shstr[s.sh_name] << '\n';
+  }
+
+  return os;
+}
+
+template <typename Ehdr, typename Phdr, typename Traits = header_traits<Ehdr, Phdr>>
+std::ostream& operator<<(std::ostream& os, const SegmentLE<Ehdr, Phdr>& segment) {
+  os << std::setw(9) << "type";
+  os << std::setw(9) << "offset";
+  os << std::setw(9) << "vaddr";
+  os << std::setw(9) << "paddr";
+  os << std::setw(9) << "filesz";
+  os << std::setw(9) << "memsz";
+  os << std::setw(9) << "flags";
+  os << std::setw(9) << "align";
+  os << '\n';
+
+  for (const auto& p : segment) {
+    os << std::setw(9) << p.p_type;
+    os << std::setw(9) << p.p_offset;
+    os << std::setw(9) << p.p_vaddr;
+    os << std::setw(9) << p.p_paddr;
+    os << std::setw(9) << p.p_filesz;
+    os << std::setw(9) << p.p_memsz;
+    os << std::setw(9) << p.p_flags;
+    os << std::setw(9) << p.p_align;
+    os << '\n';
+  }
+
+  return os;
+}
+
 std::ostream& coff_dump(std::ostream& os, char* buff) {
   auto& Dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic != IMAGE_DOS_SIGNATURE) {
@@ -392,7 +477,7 @@ std::ostream& coff_dump(std::ostream& os, char* buff) {
       os << "Characteristics: " << iter->Characteristics << '\n';
     }
   }
-  
+
   return os;
 }
 
@@ -404,12 +489,20 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
     return os << "invalid ELF type\n";
   }
 
-  auto first = traits::begin(ehdr), last = traits::end(ehdr);
-  auto shstr = &buff[first[ehdr.e_shstrndx].sh_offset];
-
-  for (auto iter = first; iter != last; ++iter) {
-    os << &shstr[iter->sh_name] << '\n';
+  if (auto& section = reinterpret_cast<SectionLE<Elf64_Ehdr, Elf64_Shdr>&>(buff[0])) {
+    os << std::hex << section << '\n';
   }
+
+  if (auto& segment = reinterpret_cast<SegmentLE<Elf64_Ehdr, Elf64_Phdr>&>(buff[0])) {
+    os << std::hex << segment << '\n';
+  }
+
+  //auto first = traits::begin(ehdr), last = traits::end(ehdr);
+  //auto shstr = &buff[first[ehdr.e_shstrndx].sh_offset];
+
+  //for (auto iter = first; iter != last; ++iter) {
+  //  os << &shstr[iter->sh_name] << '\n';
+  //}
   return os;
 }
 
