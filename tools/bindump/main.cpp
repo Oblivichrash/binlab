@@ -10,6 +10,8 @@
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
 
+#include "symbols.h"
+
 using namespace binlab::COFF;
 using namespace binlab::ELF;
 
@@ -375,6 +377,9 @@ class SectionLE : public Ehdr {
  public:
   constexpr explicit operator bool() const noexcept { return Traits::check_magic(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Traits::check_class(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Ehdr::e_ident[EI_DATA] == ELFDATA2LSB; }
 
+  constexpr Shdr& operator[](std::size_t pos) { return begin()[pos]; }
+  constexpr const Shdr& operator[](std::size_t pos) const { return begin()[pos]; }
+
   Shdr* begin() noexcept { return reinterpret_cast<Shdr*>(&Ehdr::e_ident[Ehdr::e_shoff]); }
   const Shdr* begin() const noexcept { return reinterpret_cast<const Shdr*>(&Ehdr::e_ident[Ehdr::e_shoff]); }
   Shdr* end() noexcept { return begin() + Ehdr::e_shnum; }
@@ -388,6 +393,9 @@ template <typename Ehdr, typename Phdr, typename Traits = header_traits<Ehdr, Ph
 class SegmentLE : public Ehdr {
  public:
   constexpr explicit operator bool() const noexcept { return Traits::check_magic(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Traits::check_class(reinterpret_cast<const Ehdr&>(Ehdr::e_ident[0])) && Ehdr::e_ident[EI_DATA] == ELFDATA2LSB; }
+
+  constexpr Phdr& operator[](std::size_t pos) { return begin()[pos]; }
+  constexpr const Phdr& operator[](std::size_t pos) const { return begin()[pos]; }
 
   Phdr* begin() noexcept { return reinterpret_cast<Phdr*>(&Ehdr::e_ident[Ehdr::e_phoff]); }
   const Phdr* begin() const noexcept { return reinterpret_cast<const Phdr*>(&Ehdr::e_ident[Ehdr::e_phoff]); }
@@ -481,6 +489,36 @@ std::ostream& coff_dump(std::ostream& os, char* buff) {
   return os;
 }
 
+std::ostream& symbol_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64_Shdr>& sections, std::size_t index) {
+  auto symtab = reinterpret_cast<Elf64_Sym*>(&base[sections[sections[index].sh_link].sh_offset]);
+  auto strtab = &base[sections[sections[sections[index].sh_link].sh_link].sh_offset];
+
+  gnu_hash_table hashtab{symtab, strtab, &base[sections[index].sh_offset]};
+
+  os << std::hex;
+  for (auto iter = hashtab.begin(); iter != hashtab.end(); ++iter) {
+    auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+    os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+  }
+  os << '\n';
+
+  const char* name = "_IO_fread";
+
+  //os << "find:\n";
+  //auto n = hashtab.bucket(name);
+  //for (auto iter = hashtab.begin(n); iter != hashtab.end(n); ++iter) {
+  //  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+  //  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+  //}
+  //os << '\n';
+
+  auto iter =  hashtab.find(name);
+  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+
+  return os;
+}
+
 std::ostream& elf_dump(std::ostream& os, char* buff) {
   using traits = header_traits<Elf64_Ehdr, Elf64_Shdr>;
 
@@ -489,13 +527,27 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
     return os << "invalid ELF type\n";
   }
 
-  if (auto& section = reinterpret_cast<SectionLE<Elf64_Ehdr, Elf64_Shdr>&>(buff[0])) {
-    os << std::hex << section << '\n';
+  auto& section = reinterpret_cast<SectionLE<Elf64_Ehdr, Elf64_Shdr>&>(buff[0]);
+  for (std::size_t i = 0; i < section.e_shnum; ++i) {
+    switch (section[i].sh_type) {
+      case SHT_HASH:
+        //symbol_dump(os, buff, section, i);
+        break;
+      case SHT_GNU_HASH:
+        symbol_dump(os, buff, section, i);
+        break;
+      default:
+        break;
+    }
   }
 
-  if (auto& segment = reinterpret_cast<SegmentLE<Elf64_Ehdr, Elf64_Phdr>&>(buff[0])) {
-    os << std::hex << segment << '\n';
-  }
+  //if (auto& section = reinterpret_cast<SectionLE<Elf64_Ehdr, Elf64_Shdr>&>(buff[0])) {
+  //  os << std::hex << section << '\n';
+  //}
+
+  //if (auto& segment = reinterpret_cast<SegmentLE<Elf64_Ehdr, Elf64_Phdr>&>(buff[0])) {
+  //  os << std::hex << segment << '\n';
+  //}
 
   //auto first = traits::begin(ehdr), last = traits::end(ehdr);
   //auto shstr = &buff[first[ehdr.e_shstrndx].sh_offset];

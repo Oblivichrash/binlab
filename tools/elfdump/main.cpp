@@ -320,7 +320,7 @@ template <typename Verdaux, typename Verdef, typename Vernaux, typename Verneed,
 std::ostream& ph_sym_dump(std::ostream& os, char* base, Dyn* dyn, Phdr* first, Phdr* last) {
   elf_hash_table* elf_hash = nullptr;
 
-  char* strtab;
+  char* strtab = nullptr;
   Sym* symtab;
   //decltype(Dyn::d_un.d_val) strsz;
   //decltype(Dyn::d_un.d_val) syment;
