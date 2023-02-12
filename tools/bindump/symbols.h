@@ -27,8 +27,7 @@ class sysv_bucket_iterator : public iterator_facade<sysv_bucket_iterator<Value, 
   using pointer             = std::add_pointer_t<std::remove_reference_t<Reference>>;
   using reference           = Reference;
 
-  sysv_bucket_iterator(pointer symtab, std::uint32_t* chain, difference_type index)
-      : symtab_{symtab}, chain_{chain}, index_{index} {}
+  sysv_bucket_iterator(pointer symtab, std::uint32_t* chain, difference_type index) : symtab_{symtab}, chain_{chain}, index_{index} {}
 
   explicit operator bool() const noexcept { return index_ != STN_UNDEF; }
 
@@ -41,7 +40,7 @@ class sysv_bucket_iterator : public iterator_facade<sysv_bucket_iterator<Value, 
   std::uint32_t*        chain_;
   difference_type       index_;
 
-  friend class iterator_facade_access;
+  friend class iterator_facade<sysv_bucket_iterator<Value, Reference, Difference>, Value, std::forward_iterator_tag, Reference, Difference>;
 };
 
 template <typename T>

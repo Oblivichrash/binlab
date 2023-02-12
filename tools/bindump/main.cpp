@@ -493,7 +493,7 @@ std::ostream& symbol_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, El
   auto symtab = reinterpret_cast<Elf64_Sym*>(&base[sections[sections[index].sh_link].sh_offset]);
   auto strtab = &base[sections[sections[sections[index].sh_link].sh_link].sh_offset];
 
-  gnu_hash_table hashtab{symtab, strtab, &base[sections[index].sh_offset]};
+  sysv_hash_table hashtab{symtab, strtab, &base[sections[index].sh_offset]};
 
   os << std::hex;
   for (auto iter = hashtab.begin(); iter != hashtab.end(); ++iter) {
@@ -531,10 +531,10 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
   for (std::size_t i = 0; i < section.e_shnum; ++i) {
     switch (section[i].sh_type) {
       case SHT_HASH:
-        //symbol_dump(os, buff, section, i);
+        symbol_dump(os, buff, section, i);
         break;
       case SHT_GNU_HASH:
-        symbol_dump(os, buff, section, i);
+        //symbol_dump(os, buff, section, i);
         break;
       default:
         break;
