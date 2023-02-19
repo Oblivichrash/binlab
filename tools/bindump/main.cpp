@@ -489,33 +489,42 @@ std::ostream& coff_dump(std::ostream& os, char* buff) {
   return os;
 }
 
-std::ostream& symbol_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64_Shdr>& sections, std::size_t index) {
+template <typename Hash>
+std::ostream& hash_sym_dump(std::ostream& os, const Hash& hashtab, const char* strtab) {
+  for (std::size_t n = 0; n < hashtab.bucket_count(); ++n) {
+    for (auto iter = hashtab.begin(n); iter != hashtab.end(n); ++iter) {
+      auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+      os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+    }
+    os << '\n';
+  }
+
+  const char* name = "_IO_fread";
+  auto iter =  hashtab.find(name);
+  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+  return os;
+}
+
+std::ostream& sysv_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64_Shdr>& sections, std::size_t index) {
   auto symtab = reinterpret_cast<Elf64_Sym*>(&base[sections[sections[index].sh_link].sh_offset]);
   auto strtab = &base[sections[sections[sections[index].sh_link].sh_link].sh_offset];
 
   sysv_hash_table hashtab{symtab, strtab, &base[sections[index].sh_offset]};
 
-  os << std::hex;
-  for (auto iter = hashtab.begin(); iter != hashtab.end(); ++iter) {
-    auto hash = hashtab.hash_value(&strtab[iter->st_name]);
-    os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
-  }
-  os << '\n';
+  os << "sysv hash\n" << std::hex;
+  hash_sym_dump(os, hashtab, strtab);
+  return os;
+}
 
-  const char* name = "_IO_fread";
+std::ostream& gnu_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64_Shdr>& sections, std::size_t index) {
+  auto symtab = reinterpret_cast<Elf64_Sym*>(&base[sections[sections[index].sh_link].sh_offset]);
+  auto strtab = &base[sections[sections[sections[index].sh_link].sh_link].sh_offset];
 
-  //os << "find:\n";
-  //auto n = hashtab.bucket(name);
-  //for (auto iter = hashtab.begin(n); iter != hashtab.end(n); ++iter) {
-  //  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
-  //  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
-  //}
-  //os << '\n';
+  gnu_hash_table hashtab{symtab, strtab, &base[sections[index].sh_offset]};
 
-  auto iter =  hashtab.find(name);
-  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
-  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
-
+  os << "gnu hash\n" << std::hex;
+  hash_sym_dump(os, hashtab, strtab);
   return os;
 }
 
@@ -531,10 +540,10 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
   for (std::size_t i = 0; i < section.e_shnum; ++i) {
     switch (section[i].sh_type) {
       case SHT_HASH:
-        symbol_dump(os, buff, section, i);
+        sysv_dump(os, buff, section, i);
         break;
       case SHT_GNU_HASH:
-        //symbol_dump(os, buff, section, i);
+        gnu_dump(os, buff, section, i);
         break;
       default:
         break;
