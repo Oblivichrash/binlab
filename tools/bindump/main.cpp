@@ -491,9 +491,10 @@ std::ostream& coff_dump(std::ostream& os, char* buff) {
 
 template <typename Hash>
 std::ostream& hash_sym_dump(std::ostream& os, const Hash& hashtab, const char* strtab) {
+  auto hasher = hashtab.hash_function();
   for (std::size_t n = 0; n < hashtab.bucket_count(); ++n) {
     for (auto iter = hashtab.begin(n); iter != hashtab.end(n); ++iter) {
-      auto hash = hashtab.hash_value(&strtab[iter->st_name]);
+      auto hash = hasher(*iter);
       os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
     }
     os << '\n';
@@ -501,8 +502,12 @@ std::ostream& hash_sym_dump(std::ostream& os, const Hash& hashtab, const char* s
 
   const char* name = "_IO_fread";
   auto iter =  hashtab.find(name);
-  auto hash = hashtab.hash_value(&strtab[iter->st_name]);
-  os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+  if (iter != hashtab.end()) {
+    auto hash = hasher(*iter);
+    os << std::setw(9) << hash << "(" << std::setw(4) << (hash % hashtab.bucket_count()) << "): " << &strtab[iter->st_name] << '\n';
+  } else {
+    os << "coundn't find: " << name << '\n';
+  }
   return os;
 }
 
