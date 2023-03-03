@@ -533,6 +533,25 @@ std::ostream& gnu_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64
   return os;
 }
 
+std::ostream& dynamic_dump(std::ostream& os, char* base, SectionLE<Elf64_Ehdr, Elf64_Shdr>& sections, std::size_t index) {
+  auto strtab = &base[sections[sections[index].sh_link].sh_offset];
+
+  auto dyn = reinterpret_cast<Elf64_Dyn*>(&base[sections[index].sh_offset]);
+  for (; dyn->d_tag != DT_NULL; ++dyn) {
+    switch (dyn->d_tag) {
+      case DT_NEEDED:
+        os << &strtab[dyn->d_un.d_val] << '\n';
+        break;
+      //case DT_STRTAB:
+      //  os << std::hex << (void*)&base[dyn->d_un.d_val] << ' ' << (void*)strtab << '\n';
+      //  break;
+      default:
+        break;
+    }
+  }
+  return os;
+}
+
 std::ostream& elf_dump(std::ostream& os, char* buff) {
   using traits = header_traits<Elf64_Ehdr, Elf64_Shdr>;
 
@@ -545,10 +564,13 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
   for (std::size_t i = 0; i < section.e_shnum; ++i) {
     switch (section[i].sh_type) {
       case SHT_HASH:
-        sysv_dump(os, buff, section, i);
+        //sysv_dump(os, buff, section, i);
+        break;
+      case SHT_DYNAMIC:
+        dynamic_dump(os, buff, section, i);
         break;
       case SHT_GNU_HASH:
-        gnu_dump(os, buff, section, i);
+        //gnu_dump(os, buff, section, i);
         break;
       default:
         break;

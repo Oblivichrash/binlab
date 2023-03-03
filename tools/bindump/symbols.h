@@ -268,7 +268,7 @@ class gnu_hash_table {
   using hasher                  = Hash;
 
   using iterator                = mapped_type*;
-  using const_iterator           = const mapped_type*;
+  using const_iterator          = const mapped_type*;
 
   using local_iterator          = gnu_bucket_iterator<T>;
   using const_local_iterator    = gnu_bucket_iterator<T, const T&>;
