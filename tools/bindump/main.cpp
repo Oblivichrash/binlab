@@ -567,10 +567,10 @@ std::ostream& elf_dump(std::ostream& os, char* buff) {
         //sysv_dump(os, buff, section, i);
         break;
       case SHT_DYNAMIC:
-        dynamic_dump(os, buff, section, i);
+        //dynamic_dump(os, buff, section, i);
         break;
       case SHT_GNU_HASH:
-        //gnu_dump(os, buff, section, i);
+        gnu_dump(os, buff, section, i);
         break;
       default:
         break;
