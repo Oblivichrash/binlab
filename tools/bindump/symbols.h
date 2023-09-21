@@ -215,8 +215,6 @@ class gnu_bucket_iterator {
 
   bool operator==(const gnu_bucket_iterator& rhs) const noexcept { return equals(rhs); }
   bool operator!=(const gnu_bucket_iterator& rhs) const noexcept { return !(*this == rhs); }
-  bool operator==(const std::uint32_t& hash) const noexcept { return (chain_[index_] | 1) == (hash | 1); }
-  bool operator!=(const std::uint32_t& hash) const noexcept { return !(*this == hash); }
   explicit operator bool() const noexcept { return index_ != STN_UNDEF; }
 
  private:
@@ -316,8 +314,9 @@ class gnu_hash_table {
     auto equal_to = [this](const char* key, const T& sym) { return !std::strcmp(key, &strtab_[sym.st_name]); };
     auto n = hash % bucket_count();
     if (filter_(hash)) {
-      for (auto iter = begin(n); iter != end(n); ++iter) {
-        if (hash == iter && equal_to(k, *iter)) {
+      auto chain = &chain_[bucket_[n]];
+      for (auto iter = begin(n); iter != end(n); ++iter, ++chain) {
+        if ((hash | 1) == (*chain | 1) && equal_to(k, *iter)) {
           return std::to_address(iter);
         }
       }

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -15,6 +16,56 @@
 
 using namespace binlab::COFF;
 using namespace binlab::ELF;
+
+class section_ref {
+ public:
+  using byte_type       = char;
+  using byte_pointer    = char*;
+  using address_type    = std::size_t;
+
+  section_ref(const address_type& base, void* data) : base_{base}, data_{static_cast<byte_pointer>(data)} {}
+
+  constexpr byte_type& operator[](address_type addr) { return data_[addr - base_]; }
+  constexpr const byte_type& operator[](address_type addr) const { return data_[addr - base_]; }
+
+ private:
+  address_type base_;
+  byte_pointer data_;
+};
+
+class import_table64_ref {
+ public:
+  import_table64_ref(std::size_t virtual_address, section_ref& section) : section_{section}, vaddr_{virtual_address} {}
+
+  IMAGE_IMPORT_DESCRIPTOR* begin() { return reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&section_[vaddr_]); }
+  auto end() { return std::default_sentinel; }
+  IMAGE_THUNK_DATA64* begin(const IMAGE_IMPORT_DESCRIPTOR& desc) { return reinterpret_cast<IMAGE_THUNK_DATA64*>(&section_[desc.OriginalFirstThunk]); }
+  auto end(const IMAGE_IMPORT_DESCRIPTOR& desc) { return std::default_sentinel; }
+
+ private:
+  section_ref section_;
+  std::size_t vaddr_;
+};
+
+constexpr bool operator==(const IMAGE_IMPORT_DESCRIPTOR* desc, std::default_sentinel_t) { return !desc->Name; }
+constexpr bool operator==(const IMAGE_THUNK_DATA64* thunk, std::default_sentinel_t) { return !thunk->u1.AddressOfData; }
+
+std::ostream& dump_import64(std::ostream& os, section_ref& section, std::size_t vaddr) {
+  import_table64_ref table(vaddr, section);
+  for (auto& descriptor : table) {
+    os << &section[descriptor.Name] << '\n';
+    for (auto thunk = table.begin(descriptor); thunk != std::default_sentinel; ++thunk) {
+      if (!IMAGE_SNAP_BY_ORDINAL64(thunk->u1.Ordinal)) {
+        auto& name = reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(section[thunk->u1.AddressOfData]);
+        os << std::setw(6) << name.Hint << ": " << &name.Name[0] << '\n';
+      } else {
+        os << std::setw(6) << IMAGE_ORDINAL64(thunk->u1.Ordinal) << '\n';
+      }
+    }
+  }
+  os << '\n';
+  return os;
+}
 
 std::ostream& dump_coff(std::ostream& os, char* buff) {
   auto& Dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
@@ -31,12 +82,11 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
   auto last = first + Nt.FileHeader.NumberOfSections;
   os << std::hex;
 
+  auto vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
   for (auto iter = first; iter != last; ++iter) {
-    if (iter->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
-      os << std::string{reinterpret_cast<char*>(iter->Name), sizeof(iter->Name)} << '\t';
-      os << "offset: " << iter->PointerToRawData << '\t';
-      os << "size: " << iter->SizeOfRawData << '\t';
-      os << "Characteristics: " << iter->Characteristics << '\n';
+    if (iter->VirtualAddress <= vaddr && vaddr < iter->VirtualAddress + iter->Misc.VirtualSize) {
+      section_ref section(iter->VirtualAddress, buff + iter->PointerToRawData);
+      dump_import64(os, section, vaddr);
     }
   }
 
@@ -54,7 +104,7 @@ std::ostream& dump_hash(std::ostream& os, const Hash& hashtab, const char* strta
     os << '\n';
   }
 
-  const char* name = "_IO_fread";
+  const char* name = "__bss_start__";
   auto iter =  hashtab.find(name);
   if (iter != hashtab.end()) {
     auto hash = hasher(*iter);
@@ -100,6 +150,7 @@ std::ostream& dump_elf(std::ostream& os, char* buff) {
       case SHT_DYNAMIC: {
         auto strtab = &buff[shdr[iter->sh_link].sh_offset];
         auto dyn = reinterpret_cast<Elf64_Dyn*>(&buff[iter->sh_offset]);
+        os << "dyn offset: " << std::hex << iter->sh_offset << '\n';
         dump_dynamic(os, dyn, strtab);
         break;
       }
