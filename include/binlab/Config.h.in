@@ -1,0 +1,9 @@
+// the configured options and settings for binlab
+
+#ifndef BINLAB_CONFIG_H_
+#define BINLAB_CONFIG_H_
+
+#define BINLAB_VERSION_MAJOR @BINLAB_VERSION_MAJOR@
+#define BINLAB_VERSION_MINOR @BINLAB_VERSION_MINOR@
+
+#endif  // BINLAB_CONFIG_H_

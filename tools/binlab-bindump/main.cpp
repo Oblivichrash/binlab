@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 
-#include "binlab/Config/Config.h"
+#include "binlab/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
 
@@ -40,7 +40,7 @@ class import_table64_ref {
   IMAGE_IMPORT_DESCRIPTOR* begin() { return reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&section_[vaddr_]); }
   auto end() { return std::default_sentinel; }
   IMAGE_THUNK_DATA64* begin(const IMAGE_IMPORT_DESCRIPTOR& desc) { return reinterpret_cast<IMAGE_THUNK_DATA64*>(&section_[desc.OriginalFirstThunk]); }
-  auto end(const IMAGE_IMPORT_DESCRIPTOR& desc) { return std::default_sentinel; }
+  auto end(const IMAGE_IMPORT_DESCRIPTOR&) { return std::default_sentinel; }
 
  private:
   section_ref section_;
@@ -136,7 +136,7 @@ std::ostream& dump_elf(std::ostream& os, char* buff) {
 
   auto& ehdr = reinterpret_cast<Elf64_Ehdr&>(buff[0]);
   auto shdr = reinterpret_cast<Elf64_Shdr*>(&buff[ehdr.e_shoff]);
-  auto shstr = &buff[shdr[ehdr.e_shstrndx].sh_offset];
+  //auto shstr = &buff[shdr[ehdr.e_shstrndx].sh_offset];
   for (auto iter = shdr; iter != shdr + ehdr.e_shnum; ++iter) {
     //os << &shstr[iter->sh_name] << '\n';
     switch (iter->sh_type) {
@@ -171,7 +171,7 @@ std::ostream& dump_elf(std::ostream& os, char* buff) {
 int main(int argc, char* argv[]) try {
   if (argc < 2) {
     std::cerr << argv[0] << " Version " << BINLAB_VERSION_MAJOR << '.' << BINLAB_VERSION_MINOR << '\n';
-    std::cout << "Usage: " << argv[0] << " <file>\n";
+    std::cout << "Usage: " << argv[0] << " <input> <output>\n";
     return 1;
   }
 

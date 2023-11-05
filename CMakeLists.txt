@@ -1,10 +1,10 @@
 # binlab: Binary Laboratory
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.22)
 
-project(binlab VERSION 0.1)
+project(BINLAB VERSION 0.1)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
@@ -15,6 +15,16 @@ add_compile_options(
   "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>"
 )
 
-configure_file("include/binlab/Config/Config.h.in" "${PROJECT_BINARY_DIR}/binlab/Config/Config.h")
+configure_file(include/binlab/Config.h.in include/binlab/Config.h)
+install(FILES "${PROJECT_BINARY_DIR}/include/binlab/Config.h" DESTINATION include/binlab)
 
-add_subdirectory("tools/bindump")
+add_subdirectory("tools/binlab-bindump")
+
+include(InstallRequiredSystemLibraries)
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_VERSION_MAJOR "${BINLAB_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${BINLAB_VERSION_MINOR}")
+include(CPack)
+
+include(CTest)
+add_subdirectory("test/binlab-bindump")
