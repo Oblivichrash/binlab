@@ -1,6 +1,6 @@
 # binlab: Binary Laboratory
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.20)
 
 project(BINLAB VERSION 0.1)
 
@@ -18,7 +18,7 @@ add_compile_options(
 configure_file(include/binlab/Config.h.in include/binlab/Config.h)
 install(FILES "${PROJECT_BINARY_DIR}/include/binlab/Config.h" DESTINATION include/binlab)
 
-add_subdirectory("tools/binlab-bindump")
+add_subdirectory("tools/binlab-dumpbin")
 
 include(InstallRequiredSystemLibraries)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
@@ -27,4 +27,4 @@ set(CPACK_PACKAGE_VERSION_MINOR "${BINLAB_VERSION_MINOR}")
 include(CPack)
 
 include(CTest)
-add_subdirectory("test/binlab-bindump")
+add_subdirectory("test/binlab-dumpbin")

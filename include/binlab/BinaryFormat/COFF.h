@@ -19,6 +19,8 @@ using ULONG_PTR   = std::uint64_t;
 using VOID        = void;
 using PVOID       = void*;
 
+using WCHAR       = wchar_t;
+
 static constexpr std::uint16_t IMAGE_DOS_SIGNATURE  = 0x5A4D;       // MZ
 static constexpr std::uint32_t IMAGE_NT_SIGNATURE   = 0x00004550;   // PE00
 
@@ -567,6 +569,53 @@ struct IMAGE_DELAYLOAD_DESCRIPTOR {
   DWORD UnloadInformationTableRVA;        // RVA to an optional unload info table
   DWORD TimeDateStamp;                    // 0 if not bound,
                                           // Otherwise, date/time of the target DLL
+};
+
+// Resource Format.
+
+struct IMAGE_RESOURCE_DIRECTORY {
+  DWORD   Characteristics;
+  DWORD   TimeDateStamp;
+  WORD    MajorVersion;
+  WORD    MinorVersion;
+  WORD    NumberOfNamedEntries;
+  WORD    NumberOfIdEntries;
+//IMAGE_RESOURCE_DIRECTORY_ENTRY DirectoryEntries[];
+};
+
+struct IMAGE_RESOURCE_DIRECTORY_ENTRY {
+  union {
+    struct {
+      DWORD NameOffset:31;
+      DWORD NameIsString:1;
+    };
+    DWORD   Name;
+    WORD    Id;
+  };
+  union {
+    DWORD   OffsetToData;
+    struct {
+      DWORD   OffsetToDirectory:31;
+      DWORD   DataIsDirectory:1;
+    };
+  };
+};
+
+struct IMAGE_RESOURCE_DIRECTORY_STRING {
+  WORD    Length;
+  CHAR    NameString[1];
+};
+
+struct IMAGE_RESOURCE_DIR_STRING_U {
+  WORD    Length;
+  WCHAR   NameString[1];
+};
+
+struct IMAGE_RESOURCE_DATA_ENTRY {
+  DWORD   OffsetToData;
+  DWORD   Size;
+  DWORD   CodePage;
+  DWORD   Reserved;
 };
 
 }  // namespace COFF

@@ -1,4 +1,4 @@
-// tools/bindump/main.cpp: Dump Binary files
+// tools/binlab-dumpbin/binlab-dumpbin.cpp: Dump Binary files
 
 #include <cstddef>
 #include <cstring>
@@ -11,6 +11,7 @@
 #include "binlab/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
+#include "resource_directory.h"
 
 #include "symbols.h"
 
@@ -82,11 +83,17 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
   auto last = first + Nt.FileHeader.NumberOfSections;
   os << std::hex;
 
-  auto vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+  auto vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
   for (auto iter = first; iter != last; ++iter) {
     if (iter->VirtualAddress <= vaddr && vaddr < iter->VirtualAddress + iter->Misc.VirtualSize) {
-      section_ref section(iter->VirtualAddress, buff + iter->PointerToRawData);
-      dump_import64(os, section, vaddr);
+      auto base = buff + iter->PointerToRawData;
+      auto offset = vaddr - iter->VirtualAddress;
+
+      section_ref section(iter->VirtualAddress, base);
+      //dump_import64(os, section, vaddr);
+      os << std::left;
+      dump(os, base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[offset]), 0);
+      os << std::right;
     }
   }
 
