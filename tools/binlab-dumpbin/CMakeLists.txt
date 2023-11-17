@@ -2,14 +2,17 @@
 
 add_executable("binlab-dumpbin"
   "binlab-dumpbin.cpp"
+  "section_header.cpp"
+  "export_directory.cpp"
+  "import_descriptor.cpp"
   "resource_directory.cpp"
 )
 
 target_include_directories("binlab-dumpbin"
   PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+  "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>"
 )
 
 install(TARGETS "binlab-dumpbin")

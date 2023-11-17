@@ -6,69 +6,25 @@
 #include <iterator>
 #include <iomanip>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include "binlab/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
+#include "section_header.h"
+#include "export_directory.h"
+#include "import_descriptor.h"
 #include "resource_directory.h"
 
 #include "symbols.h"
 
-using namespace binlab::COFF;
 using namespace binlab::ELF;
 
-class section_ref {
- public:
-  using byte_type       = char;
-  using byte_pointer    = char*;
-  using address_type    = std::size_t;
-
-  section_ref(const address_type& base, void* data) : base_{base}, data_{static_cast<byte_pointer>(data)} {}
-
-  constexpr byte_type& operator[](address_type addr) { return data_[addr - base_]; }
-  constexpr const byte_type& operator[](address_type addr) const { return data_[addr - base_]; }
-
- private:
-  address_type base_;
-  byte_pointer data_;
-};
-
-class import_table64_ref {
- public:
-  import_table64_ref(std::size_t virtual_address, section_ref& section) : section_{section}, vaddr_{virtual_address} {}
-
-  IMAGE_IMPORT_DESCRIPTOR* begin() { return reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(&section_[vaddr_]); }
-  auto end() { return std::default_sentinel; }
-  IMAGE_THUNK_DATA64* begin(const IMAGE_IMPORT_DESCRIPTOR& desc) { return reinterpret_cast<IMAGE_THUNK_DATA64*>(&section_[desc.OriginalFirstThunk]); }
-  auto end(const IMAGE_IMPORT_DESCRIPTOR&) { return std::default_sentinel; }
-
- private:
-  section_ref section_;
-  std::size_t vaddr_;
-};
-
-constexpr bool operator==(const IMAGE_IMPORT_DESCRIPTOR* desc, std::default_sentinel_t) { return !desc->Name; }
-constexpr bool operator==(const IMAGE_THUNK_DATA64* thunk, std::default_sentinel_t) { return !thunk->u1.AddressOfData; }
-
-std::ostream& dump_import64(std::ostream& os, section_ref& section, std::size_t vaddr) {
-  import_table64_ref table(vaddr, section);
-  for (auto& descriptor : table) {
-    os << &section[descriptor.Name] << '\n';
-    for (auto thunk = table.begin(descriptor); thunk != std::default_sentinel; ++thunk) {
-      if (!IMAGE_SNAP_BY_ORDINAL64(thunk->u1.Ordinal)) {
-        auto& name = reinterpret_cast<IMAGE_IMPORT_BY_NAME&>(section[thunk->u1.AddressOfData]);
-        os << std::setw(6) << name.Hint << ": " << &name.Name[0] << '\n';
-      } else {
-        os << std::setw(6) << IMAGE_ORDINAL64(thunk->u1.Ordinal) << '\n';
-      }
-    }
-  }
-  os << '\n';
-  return os;
-}
-
 std::ostream& dump_coff(std::ostream& os, char* buff) {
+  using namespace binlab::COFF;
+  os << std::hex;
+
   auto& Dos = reinterpret_cast<IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic != IMAGE_DOS_SIGNATURE) {
     return os << "invalid DOS magic\n";
@@ -79,22 +35,22 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
     return os << "invalid NT type\n";
   }
 
-  auto first = reinterpret_cast<IMAGE_SECTION_HEADER*>(reinterpret_cast<std::size_t>(&Nt) + offsetof(std::decay_t<decltype(Nt)>, OptionalHeader) + Nt.FileHeader.SizeOfOptionalHeader);
-  auto last = first + Nt.FileHeader.NumberOfSections;
-  os << std::hex;
-
   auto vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
-  for (auto iter = first; iter != last; ++iter) {
-    if (iter->VirtualAddress <= vaddr && vaddr < iter->VirtualAddress + iter->Misc.VirtualSize) {
-      auto base = buff + iter->PointerToRawData;
-      auto offset = vaddr - iter->VirtualAddress;
 
-      section_ref section(iter->VirtualAddress, base);
-      //dump_import64(os, section, vaddr);
-      os << std::left;
-      dump(os, base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[offset]), 0);
-      os << std::right;
+  auto sections = begin(Nt);
+  for (std::size_t i = 0; i < Nt.FileHeader.NumberOfSections; ++i) {
+    //os << sections[i] << '\n';
+
+    auto offset = vaddr - sections[i].VirtualAddress;
+    if (vaddr < sections[i].VirtualAddress || offset > sections[i].Misc.VirtualSize) {
+      continue;
     }
+    auto base = buff + sections[i].PointerToRawData;
+
+    section_ref section(sections[i].VirtualAddress, base);
+
+    //dump(os, base, vaddr, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[offset]), 0);
+    dump(os, sections[i], base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY&>(base[offset]));
   }
 
   return os;
@@ -182,21 +138,22 @@ int main(int argc, char* argv[]) try {
     return 1;
   }
 
-  if (std::ifstream is{argv[1], std::ios::binary | std::ios::ate}) {
-    const auto count = static_cast<std::size_t>(is.tellg());
-    std::vector<char> buff(count);
-    if (is.seekg(0, std::ios::beg).read(&buff[0], count)) {
-      switch (buff[0]) {
-        case 'M':
-          dump_coff(std::cout, &buff[0]);
-          break;
-        case 0x7f:  // ELFMAG0
-          dump_elf(std::cout, &buff[0]);
-          break;
-        default:
-          break;
-      }
-    }
+  std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
+  is.exceptions(std::ifstream::failbit);
+
+  const auto& count = is.tellg();
+  std::vector<char> buff(count);
+  is.seekg(0, std::ios::beg).read(&buff[0], count);
+
+  switch (buff[0]) {
+    case 'M':
+      dump_coff(std::cout, &buff[0]);
+      break;
+    case 0x7f:  // ELFMAG0
+      dump_elf(std::cout, &buff[0]);
+      break;
+    default:
+      break;
   }
 
   return 0;
