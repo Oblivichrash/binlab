@@ -15,9 +15,10 @@ add_compile_options(
   "$<${msvc_cxx}:$<BUILD_INTERFACE:-W3>>"
 )
 
-configure_file(include/binlab/Config.h.in include/binlab/Config.h)
-install(FILES "${PROJECT_BINARY_DIR}/include/binlab/Config.h" DESTINATION include/binlab)
+configure_file("include/binlab/Config.h.in" "include/binlab/Config.h")
+install(FILES "${PROJECT_BINARY_DIR}/include/binlab/Config.h" DESTINATION "include/binlab")
 
+add_subdirectory("lib/BinaryFormat/COFF")
 add_subdirectory("tools/binlab-dumpbin")
 
 include(InstallRequiredSystemLibraries)

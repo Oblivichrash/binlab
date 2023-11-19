@@ -5,12 +5,28 @@
 
 #include <iosfwd>
 #include <iterator>
-#include <stdexcept>
+#include <system_error>
 
 #include "binlab/BinaryFormat/COFF.h"
 
 namespace binlab {
 namespace COFF {
+
+#ifdef _WIN32
+using WCHAR       = wchar_t;
+#else  // __GNU__
+using WCHAR       = char16_t;
+#endif  // _WIN32
+
+struct IMAGE_RESOURCE_DIRECTORY_STRING {
+  WORD    Length;
+  CHAR    NameString[1];
+};
+
+struct IMAGE_RESOURCE_DIR_STRING_U {
+  WORD    Length;
+  WCHAR   NameString[1];
+};
 
 std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIRECTORY& directory);
 std::ostream& operator<<(std::ostream& os, const IMAGE_RESOURCE_DIRECTORY_ENTRY& entry);

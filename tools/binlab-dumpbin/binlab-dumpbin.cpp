@@ -31,11 +31,22 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
   }
   
   auto& Nt = reinterpret_cast<IMAGE_NT_HEADERS64&>(buff[Dos.e_lfanew]);
-  if (Nt.Signature != IMAGE_NT_SIGNATURE || Nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+  if (Nt.Signature != IMAGE_NT_SIGNATURE) {
     return os << "invalid NT type\n";
   }
 
-  auto vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+  std::size_t vaddr;
+  switch (Nt.OptionalHeader.Magic) {
+    case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+      vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+      break;
+    case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+      vaddr = reinterpret_cast<IMAGE_NT_HEADERS32&>(Nt).OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+      break;
+    default:
+      throw std::runtime_error{"invalid optional header magic"};
+      break;
+  }
 
   auto sections = begin(Nt);
   for (std::size_t i = 0; i < Nt.FileHeader.NumberOfSections; ++i) {
@@ -132,16 +143,21 @@ std::ostream& dump_elf(std::ostream& os, char* buff) {
 }
 
 int main(int argc, char* argv[]) try {
-  if (argc < 2) {
+  if (argc < 3) {
     std::cerr << argv[0] << " Version " << BINLAB_VERSION_MAJOR << '.' << BINLAB_VERSION_MINOR << '\n';
     std::cout << "Usage: " << argv[0] << " <input> <output>\n";
     return 1;
   }
 
   std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
+  std::ofstream os{argv[2], std::ios::binary};
   is.exceptions(std::ifstream::failbit);
+  os.exceptions(std::ofstream::failbit);
 
   const auto& count = is.tellg();
+  if (!count) {
+    throw std::runtime_error{"empty file"};
+  }
   std::vector<char> buff(count);
   is.seekg(0, std::ios::beg).read(&buff[0], count);
 
@@ -150,11 +166,12 @@ int main(int argc, char* argv[]) try {
       dump_coff(std::cout, &buff[0]);
       break;
     case 0x7f:  // ELFMAG0
-      dump_elf(std::cout, &buff[0]);
+      //dump_elf(std::cout, &buff[0]);
       break;
     default:
       break;
   }
+  os.write(&buff[0], buff.size());
 
   return 0;
 } catch (const std::exception& e) {

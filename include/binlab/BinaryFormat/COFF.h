@@ -19,12 +19,6 @@ using ULONG_PTR   = std::uint64_t;
 using VOID        = void;
 using PVOID       = void*;
 
-#ifdef _WIN32
-using WCHAR       = wchar_t;
-#else  // __GNU__
-using WCHAR       = char16_t;
-#endif  // _WIN32
-
 static constexpr std::uint16_t IMAGE_DOS_SIGNATURE  = 0x5A4D;       // MZ
 static constexpr std::uint32_t IMAGE_NT_SIGNATURE   = 0x00004550;   // PE00
 
@@ -603,16 +597,6 @@ struct IMAGE_RESOURCE_DIRECTORY_ENTRY {
       DWORD   DataIsDirectory:1;
     };
   };
-};
-
-struct IMAGE_RESOURCE_DIRECTORY_STRING {
-  WORD    Length;
-  CHAR    NameString[1];
-};
-
-struct IMAGE_RESOURCE_DIR_STRING_U {
-  WORD    Length;
-  WCHAR   NameString[1];
 };
 
 struct IMAGE_RESOURCE_DATA_ENTRY {
