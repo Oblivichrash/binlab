@@ -5,6 +5,7 @@ add_library("COFF"
   "export_directory.cpp"
   "import_descriptor.cpp"
   "resource_directory.cpp"
+  "base_relocation.cpp"
 )
 
 target_include_directories("COFF"

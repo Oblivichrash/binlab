@@ -420,21 +420,6 @@ struct IMAGE_BASE_RELOCATION {
 //  WORD    TypeOffset[1];
 };
 
-// Based relocation types.
-enum {
-  IMAGE_REL_BASED_ABSOLUTE              = 0,
-  IMAGE_REL_BASED_HIGH                  = 1,
-  IMAGE_REL_BASED_LOW                   = 2,
-  IMAGE_REL_BASED_HIGHLOW               = 3,
-  IMAGE_REL_BASED_HIGHADJ               = 4,
-  IMAGE_REL_BASED_MACHINE_SPECIFIC_5    = 5,
-  IMAGE_REL_BASED_RESERVED              = 6,
-  IMAGE_REL_BASED_MACHINE_SPECIFIC_7    = 7,
-  IMAGE_REL_BASED_MACHINE_SPECIFIC_8    = 8,
-  IMAGE_REL_BASED_MACHINE_SPECIFIC_9    = 9,
-  IMAGE_REL_BASED_DIR64                 = 10
-};
-
 // Export Format
 struct IMAGE_EXPORT_DIRECTORY {
   DWORD   Characteristics;
