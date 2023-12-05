@@ -5,13 +5,10 @@ add_library("COFF"
   "export_directory.cpp"
   "import_descriptor.cpp"
   "resource_directory.cpp"
+  "base_relocation.cpp"
 )
 
 target_include_directories("COFF"
-  PUBLIC
-  "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-  "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
-  "$<INSTALL_INTERFACE:include>"
-  INTERFACE
-  "${CMAKE_CURRENT_SOURCE_DIR}"
+  PRIVATE "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+  INTERFACE "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>" "$<INSTALL_INTERFACE:include>" "${CMAKE_CURRENT_SOURCE_DIR}"
 )

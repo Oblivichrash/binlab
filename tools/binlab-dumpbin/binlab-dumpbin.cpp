@@ -16,6 +16,7 @@
 #include "export_directory.h"
 #include "import_descriptor.h"
 #include "resource_directory.h"
+#include "base_relocation.h"
 
 #include "symbols.h"
 
@@ -35,13 +36,14 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
     return os << "invalid NT type\n";
   }
 
+  constexpr std::size_t index = IMAGE_DIRECTORY_ENTRY_BASERELOC;
   std::size_t vaddr;
   switch (Nt.OptionalHeader.Magic) {
     case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
-      vaddr = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+      vaddr = Nt.OptionalHeader.DataDirectory[index].VirtualAddress;
       break;
     case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
-      vaddr = reinterpret_cast<IMAGE_NT_HEADERS32&>(Nt).OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+      vaddr = reinterpret_cast<IMAGE_NT_HEADERS32&>(Nt).OptionalHeader.DataDirectory[index].VirtualAddress;
       break;
     default:
       throw std::runtime_error{"invalid optional header magic"};
@@ -61,7 +63,8 @@ std::ostream& dump_coff(std::ostream& os, char* buff) {
     section_ref section(sections[i].VirtualAddress, base);
 
     //dump(os, base, vaddr, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY*>(&base[offset]), 0);
-    dump(os, sections[i], base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY&>(base[offset]));
+    //dump(os, sections[i], base, reinterpret_cast<IMAGE_RESOURCE_DIRECTORY&>(base[offset]));
+    dump(os, sections[i], base, reinterpret_cast<IMAGE_BASE_RELOCATION&>(base[offset]));
   }
 
   return os;

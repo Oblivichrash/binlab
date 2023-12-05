@@ -9,23 +9,24 @@
 #include <iomanip>
 #include <locale>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
 #ifndef _WIN32
 #include <iconv.h>
-#endif
+#endif  // _WIN32
 
 using namespace binlab::COFF;
 
 std::ostream& binlab::COFF::operator<<(std::ostream& os, const IMAGE_RESOURCE_DIR_STRING_U& string) {
 #ifdef _WIN32
-  using char_type = std::decay_t<decltype(string.NameString[0])>;
-  std::locale loc;
-  std::string name(string.Length, '\0');
+  //using char_type = std::decay_t<decltype(string.NameString[0])>;
+  //std::locale loc;
+  //std::string name(string.Length, '\0');
 
-  std::use_facet<std::ctype<char_type>>(loc).narrow(string.NameString, string.NameString + string.Length, '.', name.data());
-  os << name;
+  //std::use_facet<std::ctype<char_type>>(loc).narrow(string.NameString, string.NameString + string.Length, '.', name.data());
+  std::basic_string_view<wchar_t> name(string.NameString, string.Length);
+  //std::wcout << name;
 #else
   auto cd = iconv_open("UTF-8", "UTF-16LE");
   if (cd == reinterpret_cast<iconv_t>(-1)) {
@@ -37,7 +38,8 @@ std::ostream& binlab::COFF::operator<<(std::ostream& os, const IMAGE_RESOURCE_DI
   std::size_t inbytesleft = string.Length * sizeof(string.NameString[0]);
   auto outbuf = buff;
   std::size_t outbytesleft = sizeof(buff);
-  if (iconv(cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft) == static_cast<std::size_t>(-1)) {
+  if (iconv(cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft) ==
+      static_cast<std::size_t>(-1)) {
     throw std::system_error{errno, std::system_category(), "iconv"};
   }
   os.write(buff, sizeof(buff) - outbytesleft);
@@ -125,24 +127,27 @@ std::ostream& binlab::COFF::dump(std::ostream& os, char* base, std::size_t vbase
 }
 
 std::ostream& dump_rt_string(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, char* base) {
-  std::vector<char> content(data.Size);
-  resource_dir_string_iterator iter{base}, d_iter{&content[0]};
-  for (std::size_t i = 0; i < 0x10; ++i, ++iter, ++d_iter) {
-    std::pair<std::wstring, std::wstring> item{L"http://www.bing.cn/", L"http://www.baidu.cn/"};
-    std::wstring name(iter->NameString, iter->NameString + iter->Length);
-    if (name == item.first) {
-      d_iter->Length = static_cast<WORD>(item.second.size());
-      std::ranges::copy(item.second, std::addressof(d_iter->NameString[0]));
-      //std::wcout << L"replace(RT_STRING) " << item.first << L" to " << item.second << L'\n';
-      if (item.first.size() < item.second.size()) {
-        throw std::runtime_error{"target string too long"};
+  std::vector<std::pair<std::wstring, std::wstring>> items{{L"sdafoashdfsda", L"foaishfoasdf"}};
+
+  for (const auto& item : items) {
+    std::vector<char> content(data.Size);
+    resource_dir_string_iterator iter{base}, d_iter{&content[0]};
+    for (std::size_t i = 0; i < 0x10; ++i, ++iter, ++d_iter) {
+      std::wstring name(iter->NameString, iter->NameString + iter->Length);
+      if (name == item.first) {
+        d_iter->Length = static_cast<WORD>(item.second.size());
+        std::ranges::copy(item.second, std::addressof(d_iter->NameString[0]));
+        //std::wcout << L"replace(RT_STRING) " << item.first << L" to " << item.second << L'\n';
+        if (item.first.size() < item.second.size()) {
+          throw std::runtime_error{"target string too long"};
+        }
+      } else {
+        std::copy_n(reinterpret_cast<char*>(std::addressof(*iter)), (iter->Length + 1) * sizeof(iter->NameString[0]), reinterpret_cast<char*>(std::addressof(*d_iter)));
       }
-    } else {
-      std::copy_n(reinterpret_cast<char*>(std::addressof(*iter)), (iter->Length + 1) * sizeof(iter->NameString[0]), reinterpret_cast<char*>(std::addressof(*d_iter)));
     }
+    data.Size = static_cast<DWORD>(std::distance(&content[0], reinterpret_cast<char*>(std::addressof(*d_iter))));
+    std::memcpy(base, &content[0], data.Size);
   }
-  data.Size = static_cast<DWORD>(std::distance(&content[0], reinterpret_cast<char*>(std::addressof(*d_iter))));
-  std::memcpy(base, &content[0], data.Size);
   return os;
 }
 
@@ -208,7 +213,7 @@ struct DLGTEMPLATEEX2 {
   //WCHAR     typeface[stringLen];
 };
 
-typedef struct {
+struct DLGITEMTEMPLATEEX {
   DWORD     helpID;
   DWORD     exStyle;
   DWORD     style;
@@ -220,12 +225,12 @@ typedef struct {
   //sz_Or_Ord windowClass;
   //sz_Or_Ord title;
   //WORD      extraCount;
-} DLGITEMTEMPLATEEX;
+};
 
 std::ostream& operator<<(std::ostream& os, const DLGTEMPLATE& dialog) {
-  os << std::setw(8) << dialog.style;
-  os << std::setw(8) << dialog.dwExtendedStyle;
-  os << std::setw(8) << dialog.cdit;
+  os << std::hex << std::setw(12) << dialog.style << std::dec;
+  os << std::setw(12) << dialog.dwExtendedStyle;
+  os << std::setw(12) << dialog.cdit;
   os << std::setw(4) << dialog.x;
   os << std::setw(4) << dialog.y;
   os << std::setw(4) << dialog.cx;
@@ -233,94 +238,126 @@ std::ostream& operator<<(std::ostream& os, const DLGTEMPLATE& dialog) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const DLGTEMPLATEEX& dialog) {
-  os << std::setw(8) << dialog.dlgVer;
-  os << std::setw(8) << dialog.signature;
-  os << std::setw(8) << dialog.helpID;
-  os << std::setw(8) << dialog.exStyle;
-  os << std::setw(8) << dialog.style;
-  os << std::setw(8) << dialog.cDlgItems;
-  os << std::setw(4) << dialog.x;
-  os << std::setw(4) << dialog.y;
-  os << std::setw(4) << dialog.cx;
-  os << std::setw(4) << dialog.cy;
+std::ostream& operator<<(std::ostream& os, const DLGTEMPLATEEX& dialogex) {
+  os << std::setw(12) << dialogex.dlgVer;
+  os << std::setw(12) << dialogex.signature;
+  os << std::setw(12) << dialogex.helpID;
+  os << std::setw(12) << dialogex.exStyle;
+  os << std::setw(12) << dialogex.style;
+  os << std::setw(12) << dialogex.cDlgItems;
+  os << std::setw(4) << dialogex.x;
+  os << std::setw(4) << dialogex.y;
+  os << std::setw(4) << dialogex.cx;
+  os << std::setw(4) << dialogex.cy;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const DLGITEMTEMPLATE& item) {
+  os << std::hex << std::setw(12) << item.style << std::dec;
+  os << std::setw(12) << item.dwExtendedStyle;
+  os << std::setw(4) << item.x;
+  os << std::setw(4) << item.y;
+  os << std::setw(4) << item.cx;
+  os << std::setw(4) << item.cy;
+  os << std::setw(12) << item.id;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const DLGITEMTEMPLATEEX& item) {
+  os << std::setw(12) << item.helpID;
+  os << std::hex << std::setw(12) << item.exStyle;
+  os << std::setw(12) << item.style << std::dec;
+  os << std::setw(4) << item.x;
+  os << std::setw(4) << item.y;
+  os << std::setw(4) << item.cx;
+  os << std::setw(4) << item.cy;
+  os << std::setw(12) << item.id;
   return os;
 }
 
 // http://bytepointer.com/resources/win32_res_format.htm
-std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, char* base) {
+std::ostream& dump_rt_dialog1(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, char* base) {
+  std::vector<char> content(data.Size, '\0');
+  using char_type = wchar_t;
   std::size_t pos = 0;
-  wchar_t* str;
+  char_type* ptr;
 
   auto& dialogex = reinterpret_cast<DLGTEMPLATEEX&>(base[pos]);
   if (dialogex.dlgVer != 1 || dialogex.signature != 0xffff) {
     auto& dialog = reinterpret_cast<DLGTEMPLATE&>(base[pos]);
+    os << std::setw(12) << "DIALOG" << dialog << '\n';
     pos += sizeof(dialog);
 
-    str = reinterpret_cast<wchar_t*>(&base[pos]);
-    if (*str == 0xffff) {
+    ptr = reinterpret_cast<char_type*>(&base[pos]);
+    if (*ptr == 0xffff) {
       pos += 4;
-    } else if (*str) {
-      std::wstring menu(str);
-      std::wcout << menu << L'\n';
+    } else if (*ptr) {
+      std::basic_string_view<char_type> menu(ptr);
+      // os << menu << '\n';
       pos += menu.size() * 2;
       pos += 2;
     } else {
       pos += 2;
     }
 
-    str = reinterpret_cast<wchar_t*>(&base[pos]);
-    if (*str == 0xffff) {
+    ptr = reinterpret_cast<char_type*>(&base[pos]);
+    if (*ptr == 0xffff) {
       pos += 4;
-    } else if (*str) {
-      std::wstring windowClass(str);
-      std::wcout << windowClass << L'\n';
+    } else if (*ptr) {
+      std::basic_string_view<char_type> windowClass(ptr);
+      // os << windowClass << '\n';
       pos += windowClass.size() * 2;
       pos += 2;
     } else {
       pos += 2;
     }
 
-    auto pointsize = reinterpret_cast<WORD&>(base[pos]);
-    pos += 2;
+    if (dialog.style & 0x40L) {
+      //auto pointsize = reinterpret_cast<WORD&>(base[pos]);
+      pos += 2;
 
-    str = reinterpret_cast<wchar_t*>(&base[pos]);
-    if (*str == 0xffff) {
-      pos += 4;
-    } else if (*str) {
-      std::wstring typeface(str);
-      std::wcout << typeface << L'\n';
-      pos += typeface.size() * 2;
-      pos += 2;
-    } else {
-      pos += 2;
+      ptr = reinterpret_cast<char_type*>(&base[pos]);
+      if (*ptr) {
+        std::basic_string_view<char_type> typeface(ptr);
+        // os << typeface << '\n';
+        pos += typeface.size() * 2;
+        pos += 2;
+      } else {
+        pos += 2;
+      }
     }
 
     for (std::size_t i = 0; i < dialog.cdit; ++i) {
       auto pad = pos % 4;  // align
       pos += pad;
 
-      auto& item = reinterpret_cast<DLGITEMTEMPLATE&>(base[pos]);
+      auto& dlgitem = reinterpret_cast<DLGITEMTEMPLATE&>(base[pos]);
+      os << std::setw(12) << "ITEM" << dlgitem << '\n';
       pos += sizeof(DLGITEMTEMPLATE);
 
-      str = reinterpret_cast<wchar_t*>(&base[pos]);
-      if (*str == 0xffff) {
+      if (dlgitem.style & 0x00000001) {
+        pos += 6;
+        continue;
+      }
+
+      ptr = reinterpret_cast<char_type*>(&base[pos]);
+      if (*ptr == 0xffff) {
         pos += 4;
-      } else if (*str) {
-        std::wstring windowClass(str);
-        std::wcout << windowClass << L'\n';
+      } else if (*ptr) {
+        std::basic_string_view<char_type> windowClass(ptr);
+        // os << windowClass << '\n';
         pos += windowClass.size() * 2;
         pos += 2;
       } else {
         pos += 2;
       }
 
-      str = reinterpret_cast<wchar_t*>(&base[pos]);
-      if (*str == 0xffff) {
+      ptr = reinterpret_cast<char_type*>(&base[pos]);
+      if (*ptr == 0xffff) {
         pos += 4;
-      } else if (*str) {
-        std::wstring title(str);
-        std::wcout << title << L'\n';
+      } else if (*ptr) {
+        std::basic_string_view<char_type> title(ptr);
+        // os << title << '\n';
         pos += title.size() * 2;
         pos += 2;
       } else {
@@ -329,42 +366,49 @@ std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, 
     }
     return os;
   }
+  os << std::setw(12) << "DIALOGEX" << dialogex << '\n';
   pos += sizeof(dialogex);
-  
-  str = reinterpret_cast<wchar_t*>(&base[pos]);
-  if (*str) {
-    std::wstring menu(str);
-    std::wcout << menu << L'\n';
+
+  ptr = reinterpret_cast<char_type*>(&base[pos]);
+  if (*ptr == 0xffff) {
+    pos += 4;
+  } else if (*ptr) {
+    std::basic_string_view<char_type> menu(ptr);
+    // os << menu << '\n';
     pos += menu.size() * 2;
   } else {
     pos += 2;
   }
 
-  str = reinterpret_cast<wchar_t*>(&base[pos]);
-  if (*str) {
-    std::wstring windowClass(str);
-    std::wcout << windowClass << L'\n';
+  ptr = reinterpret_cast<char_type*>(&base[pos]);
+  if (*ptr == 0xffff) {
+    pos += 4;
+  } else if (*ptr) {
+    std::basic_string_view<char_type> windowClass(ptr);
+    // os << windowClass << '\n';
     pos += windowClass.size() * 2;
   } else {
     pos += 2;
   }
 
-  str = reinterpret_cast<wchar_t*>(&base[pos]);
-  if (*str) {
-    std::wstring title(str);
-    std::wcout << title << L'\n';
-    pos += title.size() * 2;
-  } else {
-    pos += 2;
+  if (dialogex.exStyle & 0x00080000L) {
+    ptr = reinterpret_cast<char_type*>(&base[pos]);
+    if (*ptr) {
+      std::basic_string_view<char_type> title(ptr);
+      // os << title << '\n';
+      pos += title.size() * 2;
+    } else {
+      pos += 2;
+    }
   }
 
-  auto& fonts = reinterpret_cast<DLGTEMPLATEEX2&>(base[pos]);
+  //auto& fonts = reinterpret_cast<DLGTEMPLATEEX2&>(base[pos]);
   pos += sizeof(DLGTEMPLATEEX2);
 
-  str = reinterpret_cast<wchar_t*>(&base[pos]);
-  if (*str) {
-    std::wstring typeface(str);
-    std::wcout << typeface << L'\n';
+  ptr = reinterpret_cast<char_type*>(&base[pos]);
+  if (*ptr) {
+    std::basic_string_view<char_type> typeface(ptr);
+    // os << typeface << '\n';
     pos += typeface.size() * 2;
     pos += 2;
   } else {
@@ -375,27 +419,28 @@ std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, 
     auto pad = pos % 4;  // align
     pos += pad;
 
-    auto& item = reinterpret_cast<DLGITEMTEMPLATEEX&>(base[pos]);
+    auto& dlgitemex = reinterpret_cast<DLGITEMTEMPLATEEX&>(base[pos]);
+    os << std::setw(12) << "ITEMEX" << dlgitemex << '\n';
     pos += sizeof(DLGITEMTEMPLATEEX);
 
-    str = reinterpret_cast<wchar_t*>(&base[pos]);
-    if (*str == 0xffff) {
+    ptr = reinterpret_cast<char_type*>(&base[pos]);
+    if (*ptr == 0xffff) {
       pos += 4;
-    } else if (*str) {
-      std::wstring windowClass(str);
-      std::wcout << windowClass << L'\n';
+    } else if (*ptr) {
+      std::basic_string_view<char_type> windowClass(ptr);
+      // os << windowClass << '\n';
       pos += windowClass.size() * 2;
       pos += 2;
     } else {
       pos += 2;
     }
 
-    str = reinterpret_cast<wchar_t*>(&base[pos]);
-    if (*str == 0xffff) {
+    ptr = reinterpret_cast<char_type*>(&base[pos]);
+    if (*ptr == 0xffff) {
       pos += 4;
-    } else if (*str) {
-      std::wstring title(str);
-      std::wcout << title << L'\n';
+    } else if (*ptr) {
+      std::basic_string_view<char_type> title(ptr);
+      // os << title << '\n';
       pos += title.size() * 2;
       pos += 2;
     } else {
@@ -403,56 +448,59 @@ std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, 
     }
 
     auto extraCount = reinterpret_cast<WORD&>(base[pos]);
-    //if (extraCount) {
-    //  throw std::runtime_error{"extra count for DLGITEMTEMPLATEEX is non-zero"};
-    //}
+    // os << "extra count: " << extraCount << '\n';
+    if (extraCount) {
+      throw std::runtime_error{"extra count for DLGITEMTEMPLATEEX is non-zero"};
+    }
     pos += sizeof(extraCount);
   }
   return os;
 }
 
-//std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, char* base) {
-//  std::pair<std::wstring, std::wstring> item{L"asdasdfasd", L"asdfoasjdfoasjfodsa"};
-//
-//  auto last1 = base + data.Size;
-//  std::vector<char> content(data.Size, '\0');
-//  auto iter = &content[0];
-//
-//  auto first2 = reinterpret_cast<const char*>(&item.first[0]);
-//  auto last2 = first2 + item.first.size() * sizeof(item.first[0]);
-//  auto first3 = reinterpret_cast<const char*>(&item.second[0]);
-//  auto last3 = first3 + item.second.size() * sizeof(item.second[0]);
-//
-//  for (char *ptr1 = base, *ptr2;; ptr1 = ptr2) {
-//    ptr2 = std::search(ptr1, last1, first2, last2);
-//    iter = std::copy(ptr1, ptr2, iter);
-//    if (ptr2 == last1) {
-//      break;
-//    }
-//
-//    // new replace
-//    //std::wcout << L"replace(RT_DIALOG) " << token.first << L" to " << token.second << L'\n';
-//    if (item.first.size() < item.second.size()) {
-//      throw std::runtime_error{"target string too long"};
-//    }
-//    iter = std::copy(first3, last3, iter);
-//    ptr2 += std::distance(first2, last2);
-//
-//    // add pad bytes
-//    auto length = std::wcslen(reinterpret_cast<wchar_t*>(ptr2)) * sizeof(wchar_t);
-//    iter = std::copy(ptr2, ptr2 + length, iter);
-//    ptr2 += length;
-//
-//    auto pad = reinterpret_cast<std::size_t>(iter) % 4;
-//    if (pad) {
-//      os << "pad count: " << pad << '\n';
-//      iter = std::fill_n(iter, pad, '\0');
-//    }
-//  }
-//  data.Size = static_cast<DWORD>(std::distance(&content[0], iter));
-//  std::memcpy(base, &content[0], data.Size);
-//  return os;
-//}
+std::ostream& dump_rt_dialog(std::ostream& os, IMAGE_RESOURCE_DATA_ENTRY& data, char* base) {
+  std::vector<std::pair<std::wstring, std::wstring>> items{{L"fsdaoifjasf", L"fasdfasfasf"}};
+
+  for (const auto& item : items) {
+    auto last1 = base + data.Size;
+    std::vector<char> content(data.Size, '\0');
+    auto iter = &content[0];
+
+    auto first2 = reinterpret_cast<const char*>(&item.first[0]);
+    auto last2 = first2 + item.first.size() * sizeof(item.first[0]);
+    auto first3 = reinterpret_cast<const char*>(&item.second[0]);
+    auto last3 = first3 + item.second.size() * sizeof(item.second[0]);
+
+    for (char *ptr1 = base, *ptr2;; ptr1 = ptr2) {
+      ptr2 = std::search(ptr1, last1, first2, last2);
+      iter = std::copy(ptr1, ptr2, iter);
+      if (ptr2 == last1) {
+        break;
+      }
+
+      // new replace
+      // std::wcout << L"replace(RT_DIALOG) " << token.first << L" to " << token.second << L'\n';
+      if (item.first.size() < item.second.size()) {
+        throw std::runtime_error{"target string too long"};
+      }
+      iter = std::copy(first3, last3, iter);
+      ptr2 += std::distance(first2, last2);
+
+      // add pad bytes
+      auto length = std::wcslen(reinterpret_cast<wchar_t*>(ptr2)) * sizeof(wchar_t);
+      iter = std::copy(ptr2, ptr2 + length, iter);
+      ptr2 += length;
+
+      auto pad = reinterpret_cast<std::size_t>(iter) % 4;
+      if (pad) {
+        os << "pad count: " << pad << '\n';
+        iter = std::fill_n(iter, pad, '\0');
+      }
+    }
+    data.Size = static_cast<DWORD>(std::distance(&content[0], iter));
+    std::memcpy(base, &content[0], data.Size);
+  }
+  return os;
+}
 
 std::ostream& binlab::COFF::dump(std::ostream& os, IMAGE_SECTION_HEADER& section, char* base, IMAGE_RESOURCE_DIRECTORY& directory1) {
   auto entry1 = begin(directory1);
@@ -493,8 +541,11 @@ std::ostream& binlab::COFF::dump(std::ostream& os, IMAGE_SECTION_HEADER& section
         auto data = &base[data_entry.OffsetToData - section.VirtualAddress];
         switch (entry1[i].Id) {
           case 5:  // RT_DIALOG
-            dump_rt_dialog(os, data_entry, data);
-            break;
+          {
+             //os << entry1[i].Id << '.' << entry2[j].Id << '.' << entry3[k].Id << '\n';
+             dump_rt_dialog(os, data_entry, data);
+             break;
+          }
           case 6:  // RT_STRING
           {
             //dump_rt_string(os, data_entry, data);
