@@ -11,7 +11,8 @@ namespace COFF {
 int dump_import64(const char *buff, std::size_t size);
 int dump_import32(const char *buff, std::size_t size);
 
-int dump_obj(const char *buff, std::size_t size);
+int dump_obj_reloc(const char *buff, std::size_t size);
+int dump_obj_sym(const char *buff, std::size_t size);
 
 }  // namespace COFF
 }  // namespace binlab

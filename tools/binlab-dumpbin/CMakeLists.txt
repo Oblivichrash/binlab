@@ -3,6 +3,7 @@
 add_executable("binlab-dumpbin"
   "binlab-dumpbin.cpp"
   "coffdump.cpp"
+  "elfdump.cpp"
 )
 
 target_include_directories("binlab-dumpbin"

@@ -2,11 +2,11 @@
 
 #include "coffdump.h"
 
-#include <iostream>
+#include <cstdio>
 
 #include "binlab/BinaryFormat/COFF.h"
 
-int binlab::COFF::dump_import64(const char *buff, std::size_t size) {
+int binlab::COFF::dump_import64(const char *buff, [[maybe_unused]] std::size_t size) {
   auto& Dos = reinterpret_cast<const IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic != IMAGE_DOS_SIGNATURE) {
     return 1;
@@ -43,7 +43,7 @@ int binlab::COFF::dump_import64(const char *buff, std::size_t size) {
   return 0;
 }
 
-int binlab::COFF::dump_import32(const char *buff, std::size_t size) {
+int binlab::COFF::dump_import32(const char *buff, [[maybe_unused]] std::size_t size) {
   auto& Dos = reinterpret_cast<const IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic != IMAGE_DOS_SIGNATURE) {
     return 1;
@@ -80,11 +80,32 @@ int binlab::COFF::dump_import32(const char *buff, std::size_t size) {
   return 0;
 }
 
-int binlab::COFF::dump_obj(const char* buff, std::size_t size) {
+int binlab::COFF::dump_obj_reloc(const char* buff, [[maybe_unused]] std::size_t size) {
   auto& FileHeader = reinterpret_cast<const IMAGE_FILE_HEADER&>(buff[0]);
   auto Sections = reinterpret_cast<const IMAGE_SECTION_HEADER*>(&buff[sizeof(FileHeader) + FileHeader.SizeOfOptionalHeader]);
   for (std::size_t i = 0; i < FileHeader.NumberOfSections; ++i) {
-    std::printf("%8s\n", Sections[i].Name);
+    std::size_t offset = Sections[i].PointerToRelocations;
+    if (offset) {
+      std::printf("%02d %8s\n", i, Sections[i].Name);
+      auto relocations = reinterpret_cast<const IMAGE_RELOCATION*>(&buff[offset]);
+      for (std::size_t j = 0; j < Sections[i].NumberOfRelocations; ++j) {
+        std::printf("address: %08x index: %08x type: %08x\n", relocations[j].VirtualAddress, relocations[j].SymbolTableIndex, relocations[j].Type);
+      }
+    }
+  }
+  return 0;
+}
+
+int binlab::COFF::dump_obj_sym(const char* buff, [[maybe_unused]] std::size_t size) {
+  auto& FileHeader = reinterpret_cast<const IMAGE_FILE_HEADER&>(buff[0]);
+  auto symbols = reinterpret_cast<const IMAGE_SYMBOL*>(&buff[FileHeader.PointerToSymbolTable]);
+  auto table = reinterpret_cast<const char*>(symbols + FileHeader.NumberOfSymbols);
+  for (std::size_t i = 0; i < FileHeader.NumberOfSymbols; ++i) {
+    if (symbols[i].N.Name.Short) {
+      std::printf("%8s\n", symbols[i].N.ShortName);
+    } else {
+      std::printf("%s\n", table + symbols[i].N.Name.Long);
+    }
   }
   return 0;
 }
