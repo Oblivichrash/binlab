@@ -10,7 +10,7 @@
 
 using namespace binlab::COFF;
 
-int dump_data(const std::size_t va, std::size_t size, const std::ptrdiff_t delta) {
+int dump_data(const std::size_t va, const std::size_t size, const std::ptrdiff_t delta) {
   auto data = reinterpret_cast<const char*>(va + delta);
   constexpr std::size_t block = 16;
   const char* fmt = "%-48s  %-s\n";  // block * 3 = 48
@@ -44,7 +44,7 @@ int dump_import64(const std::size_t va , const std::size_t size, const std::ptrd
     for (auto thunks = reinterpret_cast<const IMAGE_THUNK_DATA64*>(descriptor.OriginalFirstThunk + delta); thunks->u1.AddressOfData; ++thunks) {
       if (!IMAGE_SNAP_BY_ORDINAL64(thunks->u1.Ordinal)) {
         auto name = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(thunks->u1.AddressOfData + delta);
-        std::printf("\t%p: %s\n", reinterpret_cast<const void*>(name->Hint), &name->Name[0]);
+        std::printf("\t%04x: %s\n", name->Hint, &name->Name[0]);
       } else {
         std::printf("\t%p\n", reinterpret_cast<const void*>(IMAGE_ORDINAL64(thunks->u1.Ordinal)));
       }
@@ -58,17 +58,35 @@ int dump_import64(const std::size_t va , const std::size_t size, const std::ptrd
   return 0;
 }
 
+int dump_export(const std::size_t va , const std::size_t size, const std::ptrdiff_t delta) {
+  auto& directory = *reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(va + delta);
+  std::printf("Name: %s\n", reinterpret_cast<const char*>(directory.Name + delta));
+  std::printf("Base: %08x\n", directory.Base);
+
+  auto functions = reinterpret_cast<const DWORD*>(directory.AddressOfFunctions + delta); 
+  auto names = reinterpret_cast<const DWORD*>(directory.AddressOfNames + delta); 
+  auto ordinals = reinterpret_cast<const WORD*>(directory.AddressOfNameOrdinals + delta); 
+  for (std::size_t i = 0; i < directory.NumberOfFunctions; ++i, ++functions, ++names, ++ordinals) {
+    std::printf("\t%08x", *functions);
+    std::printf("\t%04x", *ordinals);
+    std::printf("\t%s\n", reinterpret_cast<const char*>(*names + delta));
+  } 
+  return 0;
+}
+
 int dump_pe64(const char* buff) {
   auto& Dos = reinterpret_cast<const IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic == IMAGE_DOS_SIGNATURE) {
     auto& Nt = reinterpret_cast<const IMAGE_NT_HEADERS64&>(buff[Dos.e_lfanew]);
     if (Nt.Signature == IMAGE_NT_SIGNATURE && Nt.OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
       auto Sections = IMAGE_FIRST_SECTION(&Nt);
-      std::size_t va = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+      //std::size_t va = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+      std::size_t va = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
       for (std::size_t i = 0; i < Nt.FileHeader.NumberOfSections; ++i) {
         if (va && (Sections[i].VirtualAddress <= va) && (va < Sections[i].VirtualAddress + Sections[i].Misc.VirtualSize)) {
           const std::ptrdiff_t delta = reinterpret_cast<std::size_t>(buff) + Sections[i].PointerToRawData - Sections[i].VirtualAddress;
-          dump_import64(va, Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size, delta);
+          //dump_import64(va, Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size, delta);
+          dump_export(va, Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size, delta);
           break;
         }
       }
