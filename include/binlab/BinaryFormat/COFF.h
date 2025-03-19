@@ -1,16 +1,17 @@
-//
+// binlab/BinaryFormat/COFF.h: definitions for Windows COFF Files
 
 #ifndef BINLAB_BINARYFORMAT_COFF_H_
 #define BINLAB_BINARYFORMAT_COFF_H_
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 namespace binlab {
 namespace COFF {
 
 using CHAR        = std::int8_t;
 using BYTE        = std::uint8_t;
+using SHORT       = std::int16_t;
 using WORD        = std::uint16_t;
 using LONG        = std::int32_t;
 using DWORD       = std::uint32_t;
@@ -189,8 +190,8 @@ struct IMAGE_OPTIONAL_HEADER64 {
   IMAGE_DATA_DIRECTORY DataDirectory[IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
 };
 
-static constexpr  DWORD IMAGE_NT_OPTIONAL_HDR32_MAGIC = 0x10b;
-static constexpr  DWORD IMAGE_NT_OPTIONAL_HDR64_MAGIC = 0x20b;
+static constexpr std::uint16_t IMAGE_NT_OPTIONAL_HDR32_MAGIC = 0x10b;
+static constexpr std::uint16_t IMAGE_NT_OPTIONAL_HDR64_MAGIC = 0x20b;
 
 struct IMAGE_NT_HEADERS64 {
   DWORD Signature;
@@ -293,61 +294,158 @@ static constexpr std::size_t IMAGE_SIZEOF_SECTION_HEADER = 40;
 
 // Section characteristics.
 enum {
-//IMAGE_SCN_TYPE_REG                   = 0x00000000,  // Reserved.
-//IMAGE_SCN_TYPE_DSECT                 = 0x00000001,  // Reserved.
-//IMAGE_SCN_TYPE_NOLOAD                = 0x00000002,  // Reserved.
-//IMAGE_SCN_TYPE_GROUP                 = 0x00000004,  // Reserved.
-  IMAGE_SCN_TYPE_NO_PAD                = 0x00000008,  // Reserved.
-//IMAGE_SCN_TYPE_COPY                  = 0x00000010,  // Reserved.
+//IMAGE_SCN_TYPE_REG                    = 0x00000000,  // Reserved.
+//IMAGE_SCN_TYPE_DSECT                  = 0x00000001,  // Reserved.
+//IMAGE_SCN_TYPE_NOLOAD                 = 0x00000002,  // Reserved.
+//IMAGE_SCN_TYPE_GROUP                  = 0x00000004,  // Reserved.
+  IMAGE_SCN_TYPE_NO_PAD                 = 0x00000008,  // Reserved.
+//IMAGE_SCN_TYPE_COPY                   = 0x00000010,  // Reserved.
 
-  IMAGE_SCN_CNT_CODE                   = 0x00000020,  // Section contains code.
-  IMAGE_SCN_CNT_INITIALIZED_DATA       = 0x00000040,  // Section contains initialized data.
-  IMAGE_SCN_CNT_UNINITIALIZED_DATA     = 0x00000080,  // Section contains uninitialized data.
+  IMAGE_SCN_CNT_CODE                    = 0x00000020,  // Section contains code.
+  IMAGE_SCN_CNT_INITIALIZED_DATA        = 0x00000040,  // Section contains initialized data.
+  IMAGE_SCN_CNT_UNINITIALIZED_DATA      = 0x00000080,  // Section contains uninitialized data.
 
-  IMAGE_SCN_LNK_OTHER                  = 0x00000100,  // Reserved.
-  IMAGE_SCN_LNK_INFO                   = 0x00000200,  // Section contains comments or some other type of information.
-//IMAGE_SCN_TYPE_OVER                  = 0x00000400,  // Reserved.
-  IMAGE_SCN_LNK_REMOVE                 = 0x00000800,  // Section contents will not become part of image.
-  IMAGE_SCN_LNK_COMDAT                 = 0x00001000,  // Section contents comdat.
-//                                     = 0x00002000,  // Reserved.
-//IMAGE_SCN_MEM_PROTECTED - Obsolete   = 0x00004000,
-  IMAGE_SCN_NO_DEFER_SPEC_EXC          = 0x00004000,  // Reset speculative exceptions handling bits in the TLB entries for this section.
-  IMAGE_SCN_GPREL                      = 0x00008000,  // Section content can be accessed relative to GP
-  IMAGE_SCN_MEM_FARDATA                = 0x00008000,
-//IMAGE_SCN_MEM_SYSHEAP  - Obsolete    = 0x00010000,
-  IMAGE_SCN_MEM_PURGEABLE              = 0x00020000,
-  IMAGE_SCN_MEM_16BIT                  = 0x00020000,
-  IMAGE_SCN_MEM_LOCKED                 = 0x00040000,
-  IMAGE_SCN_MEM_PRELOAD                = 0x00080000,
+  IMAGE_SCN_LNK_OTHER                   = 0x00000100,  // Reserved.
+  IMAGE_SCN_LNK_INFO                    = 0x00000200,  // Section contains comments or some other type of information.
+//IMAGE_SCN_TYPE_OVER                   = 0x00000400,  // Reserved.
+  IMAGE_SCN_LNK_REMOVE                  = 0x00000800,  // Section contents will not become part of image.
+  IMAGE_SCN_LNK_COMDAT                  = 0x00001000,  // Section contents comdat.
+//                                      = 0x00002000,  // Reserved.
+//IMAGE_SCN_MEM_PROTECTED - Obsolete    = 0x00004000,
+  IMAGE_SCN_NO_DEFER_SPEC_EXC           = 0x00004000,  // Reset speculative exceptions handling bits in the TLB entries for this section.
+  IMAGE_SCN_GPREL                       = 0x00008000,  // Section content can be accessed relative to GP
+  IMAGE_SCN_MEM_FARDATA                 = 0x00008000,
+//IMAGE_SCN_MEM_SYSHEAP  - Obsolete     = 0x00010000,
+  IMAGE_SCN_MEM_PURGEABLE               = 0x00020000,
+  IMAGE_SCN_MEM_16BIT                   = 0x00020000,
+  IMAGE_SCN_MEM_LOCKED                  = 0x00040000,
+  IMAGE_SCN_MEM_PRELOAD                 = 0x00080000,
 
-  IMAGE_SCN_ALIGN_1BYTES               = 0x00100000,  //
-  IMAGE_SCN_ALIGN_2BYTES               = 0x00200000,  //
-  IMAGE_SCN_ALIGN_4BYTES               = 0x00300000,  //
-  IMAGE_SCN_ALIGN_8BYTES               = 0x00400000,  //
-  IMAGE_SCN_ALIGN_16BYTES              = 0x00500000,  // Default alignment if no others are specified.
-  IMAGE_SCN_ALIGN_32BYTES              = 0x00600000,  //
-  IMAGE_SCN_ALIGN_64BYTES              = 0x00700000,  //
-  IMAGE_SCN_ALIGN_128BYTES             = 0x00800000,  //
-  IMAGE_SCN_ALIGN_256BYTES             = 0x00900000,  //
-  IMAGE_SCN_ALIGN_512BYTES             = 0x00A00000,  //
-  IMAGE_SCN_ALIGN_1024BYTES            = 0x00B00000,  //
-  IMAGE_SCN_ALIGN_2048BYTES            = 0x00C00000,  //
-  IMAGE_SCN_ALIGN_4096BYTES            = 0x00D00000,  //
-  IMAGE_SCN_ALIGN_8192BYTES            = 0x00E00000,  //
-  // Unused                            = 0x00F00000
-  IMAGE_SCN_ALIGN_MASK                 = 0x00F00000,
+  IMAGE_SCN_ALIGN_1BYTES                = 0x00100000,
+  IMAGE_SCN_ALIGN_2BYTES                = 0x00200000,
+  IMAGE_SCN_ALIGN_4BYTES                = 0x00300000,
+  IMAGE_SCN_ALIGN_8BYTES                = 0x00400000,
+  IMAGE_SCN_ALIGN_16BYTES               = 0x00500000,  // Default alignment if no others are specified.
+  IMAGE_SCN_ALIGN_32BYTES               = 0x00600000,
+  IMAGE_SCN_ALIGN_64BYTES               = 0x00700000,
+  IMAGE_SCN_ALIGN_128BYTES              = 0x00800000,
+  IMAGE_SCN_ALIGN_256BYTES              = 0x00900000,
+  IMAGE_SCN_ALIGN_512BYTES              = 0x00A00000,
+  IMAGE_SCN_ALIGN_1024BYTES             = 0x00B00000,
+  IMAGE_SCN_ALIGN_2048BYTES             = 0x00C00000,
+  IMAGE_SCN_ALIGN_4096BYTES             = 0x00D00000,
+  IMAGE_SCN_ALIGN_8192BYTES             = 0x00E00000,
+  // Unused                             = 0x00F00000
+  IMAGE_SCN_ALIGN_MASK                  = 0x00F00000,
 
-  IMAGE_SCN_LNK_NRELOC_OVFL            = 0x01000000,  // Section contains extended relocations.
-  IMAGE_SCN_MEM_DISCARDABLE            = 0x02000000,  // Section can be discarded.
-  IMAGE_SCN_MEM_NOT_CACHED             = 0x04000000,  // Section is not cachable.
-  IMAGE_SCN_MEM_NOT_PAGED              = 0x08000000,  // Section is not pageable.
-  IMAGE_SCN_MEM_SHARED                 = 0x10000000,  // Section is shareable.
-  IMAGE_SCN_MEM_EXECUTE                = 0x20000000,  // Section is executable.
-  IMAGE_SCN_MEM_READ                   = 0x40000000,  // Section is readable.
-  IMAGE_SCN_MEM_WRITE                  = 0x80000000   // Section is writeable.
+  IMAGE_SCN_LNK_NRELOC_OVFL             = 0x01000000,  // Section contains extended relocations.
+  IMAGE_SCN_MEM_DISCARDABLE             = 0x02000000,  // Section can be discarded.
+  IMAGE_SCN_MEM_NOT_CACHED              = 0x04000000,  // Section is not cachable.
+  IMAGE_SCN_MEM_NOT_PAGED               = 0x08000000,  // Section is not pageable.
+  IMAGE_SCN_MEM_SHARED                  = 0x10000000,  // Section is shareable.
+  IMAGE_SCN_MEM_EXECUTE                 = 0x20000000,  // Section is executable.
+  IMAGE_SCN_MEM_READ                    = 0x40000000,  // Section is readable.
+  IMAGE_SCN_MEM_WRITE                   = 0x80000000   // Section is writeable.
+};
+
+// Symbol format.
+#ifdef _WIN32
+#pragma pack(push, 1)
+#else
+#pragma pack(1)
+#endif
+struct IMAGE_SYMBOL {
+  union {
+    BYTE ShortName[8];
+    struct {
+      DWORD Short;  // if 0, use LongName
+      DWORD Long;   // offset into string table
+    } Name;
+    DWORD LongName[2];  // PBYTE [2]
+  } N;
+  DWORD Value;
+  SHORT SectionNumber;
+  WORD Type;
+  BYTE StorageClass;
+  BYTE NumberOfAuxSymbols;
+};
+#ifdef _WIN32
+#pragma pack(pop)
+#else
+#pragma pack()
+#endif
+
+// Type (fundamental) values.
+enum {
+  IMAGE_SYM_TYPE_NULL                   = 0x0000,  // no type.
+  IMAGE_SYM_TYPE_VOID                   = 0x0001,
+  IMAGE_SYM_TYPE_CHAR                   = 0x0002,  // type character.
+  IMAGE_SYM_TYPE_SHORT                  = 0x0003,  // type short integer.
+  IMAGE_SYM_TYPE_INT                    = 0x0004,
+  IMAGE_SYM_TYPE_LONG                   = 0x0005,
+  IMAGE_SYM_TYPE_FLOAT                  = 0x0006,
+  IMAGE_SYM_TYPE_DOUBLE                 = 0x0007,
+  IMAGE_SYM_TYPE_STRUCT                 = 0x0008,
+  IMAGE_SYM_TYPE_UNION                  = 0x0009,
+  IMAGE_SYM_TYPE_ENUM                   = 0x000A,  // enumeration.
+  IMAGE_SYM_TYPE_MOE                    = 0x000B,  // member of enumeration.
+  IMAGE_SYM_TYPE_BYTE                   = 0x000C,
+  IMAGE_SYM_TYPE_WORD                   = 0x000D,
+  IMAGE_SYM_TYPE_UINT                   = 0x000E,
+  IMAGE_SYM_TYPE_DWORD                  = 0x000F,
+  IMAGE_SYM_TYPE_PCODE                  = 0x8000
+};
+
+// Type (derived) values.
+enum {
+  IMAGE_SYM_DTYPE_NULL                  = 0,  // no derived type.
+  IMAGE_SYM_DTYPE_POINTER               = 1,  // pointer.
+  IMAGE_SYM_DTYPE_FUNCTION              = 2,  // function.
+  IMAGE_SYM_DTYPE_ARRAY                 = 3   // array.
+};
+
+// Storage classes.
+enum {
+  IMAGE_SYM_CLASS_END_OF_FUNCTION       = (BYTE )-1,
+  IMAGE_SYM_CLASS_NULL                  = 0x0000,
+  IMAGE_SYM_CLASS_AUTOMATIC             = 0x0001,
+  IMAGE_SYM_CLASS_EXTERNAL              = 0x0002,
+  IMAGE_SYM_CLASS_STATIC                = 0x0003,
+  IMAGE_SYM_CLASS_REGISTER              = 0x0004,
+  IMAGE_SYM_CLASS_EXTERNAL_DEF          = 0x0005,
+  IMAGE_SYM_CLASS_LABEL                 = 0x0006,
+  IMAGE_SYM_CLASS_UNDEFINED_LABEL       = 0x0007,
+  IMAGE_SYM_CLASS_MEMBER_OF_STRUCT      = 0x0008,
+  IMAGE_SYM_CLASS_ARGUMENT              = 0x0009,
+  IMAGE_SYM_CLASS_STRUCT_TAG            = 0x000A,
+  IMAGE_SYM_CLASS_MEMBER_OF_UNION       = 0x000B,
+  IMAGE_SYM_CLASS_UNION_TAG             = 0x000C,
+  IMAGE_SYM_CLASS_TYPE_DEFINITION       = 0x000D,
+  IMAGE_SYM_CLASS_UNDEFINED_STATIC      = 0x000E,
+  IMAGE_SYM_CLASS_ENUM_TAG              = 0x000F,
+  IMAGE_SYM_CLASS_MEMBER_OF_ENUM        = 0x0010,
+  IMAGE_SYM_CLASS_REGISTER_PARAM        = 0x0011,
+  IMAGE_SYM_CLASS_BIT_FIELD             = 0x0012,
+
+  IMAGE_SYM_CLASS_FAR_EXTERNAL          = 0x0044,
+
+  IMAGE_SYM_CLASS_BLOCK                 = 0x0064,
+  IMAGE_SYM_CLASS_FUNCTION              = 0x0065,
+  IMAGE_SYM_CLASS_END_OF_STRUCT         = 0x0066,
+  IMAGE_SYM_CLASS_FILE                  = 0x0067,
+// new
+  IMAGE_SYM_CLASS_SECTION               = 0x0068,
+  IMAGE_SYM_CLASS_WEAK_EXTERNAL         = 0x0069,
+
+  IMAGE_SYM_CLASS_CLR_TOKEN             = 0x006B
 };
 
 // Relocation format.
+#ifdef _WIN32
+#pragma pack( push, 1 )
+#else
+#pragma pack(1)
+#endif
 struct IMAGE_RELOCATION {
   union {
     DWORD   VirtualAddress;
@@ -356,6 +454,11 @@ struct IMAGE_RELOCATION {
   DWORD   SymbolTableIndex;
   WORD    Type;
 };
+#ifdef _WIN32
+#pragma pack(pop)
+#else
+#pragma pack()
+#endif
 
 // I386 relocation types.
 enum {
@@ -594,4 +697,4 @@ struct IMAGE_RESOURCE_DATA_ENTRY {
 }  // namespace COFF
 }  // namespace binlab
 
-#endif  // BINLAB_BINARYFORMAT_COFF_H_
+#endif  // !BINLAB_BINARYFORMAT_COFF_H_

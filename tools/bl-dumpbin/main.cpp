@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -105,6 +106,25 @@ int dump_obj64(const char* buff) {
   return 0;
 }
 
+int dump_obj_sym(const char* buff) {
+  std::size_t addr = reinterpret_cast<std::size_t>(buff);
+
+  auto& FileHeader = reinterpret_cast<const IMAGE_FILE_HEADER&>(buff[0]);
+  auto symbols = reinterpret_cast<const IMAGE_SYMBOL*>(addr + FileHeader.PointerToSymbolTable);
+  auto table = reinterpret_cast<const char*>(symbols + FileHeader.NumberOfSymbols);
+  for (std::size_t i = 0; i < FileHeader.NumberOfSymbols; ++i) {
+    std::printf("%-08x %-04x %-04x %-02x", symbols[i].Value, static_cast<std::uint16_t>(symbols[i].SectionNumber), symbols[i].Type, symbols[i].StorageClass);
+    if (symbols[i].N.Name.Short) {
+      char name[sizeof(IMAGE_SYMBOL::N.ShortName) + 1] = {0};
+      std::strncpy(name, reinterpret_cast<const char*>(symbols[i].N.ShortName), sizeof(IMAGE_SYMBOL::N.ShortName));
+      std::printf("%8s\n", name);
+    } else {
+      std::printf("%s\n", table + symbols[i].N.Name.Long);
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     std::printf("%s ver: %d.%d\n", argv[0], BINLAB_VERSION_MAJOR, BINLAB_VERSION_MINOR);
@@ -118,7 +138,7 @@ int main(int argc, char* argv[]) {
     if (count) {
       std::vector<char> buff(count);
       if (is.seekg(0, std::ios::beg).read(&buff[0], count)) {
-        dump_pe64(&buff[0]);
+        dump_obj_sym(&buff[0]);
       }
     }
   }
