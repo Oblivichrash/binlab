@@ -9,8 +9,10 @@
 
 #include "binlab/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
+#include "binlab/BinaryFormat/ELF.h"
 
 using namespace binlab::COFF;
+using namespace binlab::ELF;
 
 int dump(const char* base, const std::size_t off, const std::size_t size) {
   auto data = base + off;
@@ -124,7 +126,10 @@ struct IMAGE_RESOURCE_DIR_STRING_U {
   WCHAR   NameString[1];
 };
 
-#if defined(_POSIX_VERSION) && _POSIX_VERSION >= 200809L
+#if defined(unix) || defined(__unix__) || defined(__unix)
+#include <unistd.h>
+
+#if defined(_POSIX_VERSION) && (_POSIX_VERSION >= 200809L)
 #include <iconv.h>
 
 int dump(const IMAGE_RESOURCE_DIR_STRING_U& string) {
@@ -143,6 +148,7 @@ int dump(const IMAGE_RESOURCE_DIR_STRING_U& string) {
   }
   return result;
 }
+#endif  // !_POSIX_VERSION
 #else
 int dump(const IMAGE_RESOURCE_DIR_STRING_U& string) {
   using char_type = std::decay_t<decltype(string.NameString[0])>;
@@ -153,7 +159,7 @@ int dump(const IMAGE_RESOURCE_DIR_STRING_U& string) {
   std::printf("%s\n", name.c_str());
   return 0;
 }
-#endif
+#endif  // !unix
 
 int dump(const char* base, const std::size_t off, const std::size_t va, const IMAGE_RESOURCE_DIRECTORY* directories) {
   int result = 0;
@@ -230,6 +236,19 @@ int dump_obj_sym(const char* buff) {
   return 0;
 }
 
+int dump_elf64le(const char* buff) {
+  if (!std::memcmp(buff, ELFMAG, SELFMAG) && buff[EI_CLASS] == ELFCLASS64) {
+    auto& ehdr = reinterpret_cast<const Elf64_Ehdr&>(buff[0]);
+    auto shdr = reinterpret_cast<const Elf64_Shdr*>(&buff[ehdr.e_shoff]);
+
+    auto shstr = &buff[shdr[ehdr.e_shstrndx].sh_offset];
+    for (auto iter = shdr; iter != shdr + ehdr.e_shnum; ++iter) {
+      std::printf("%s\n", &shstr[iter->sh_name]);
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     std::printf("%s ver: %d.%d\n", argv[0], BINLAB_VERSION_MAJOR, BINLAB_VERSION_MINOR);
@@ -245,6 +264,7 @@ int main(int argc, char* argv[]) {
       if (is.seekg(0, std::ios::beg).read(&buff[0], count)) {
         dump_pe64(&buff[0]);
         dump_pe32(&buff[0]);
+        dump_elf64le(&buff[0]);
       }
     }
   }

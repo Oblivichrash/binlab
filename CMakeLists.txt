@@ -9,4 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 configure_file("include/binlab/Config.h.in" "include/binlab/Config.h")
 
+include(CTest)
+
 add_subdirectory("tools/bl-dumpbin")
