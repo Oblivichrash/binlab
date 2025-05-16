@@ -5,11 +5,13 @@
 #include <cstring>
 #include <fstream>
 #include <locale>
+#include <utility>
 #include <vector>
 
 #include "binlab/Config.h"
 #include "binlab/BinaryFormat/COFF.h"
 #include "binlab/BinaryFormat/ELF.h"
+#include "address_mode_policy.h"
 
 using namespace binlab::COFF;
 using namespace binlab::ELF;
@@ -43,7 +45,7 @@ int dump(const char* base, const std::size_t off, const std::size_t size) {
   return 0;
 }
 
-int dump64(const char* base, const std::size_t off, const std::size_t va, const IMAGE_IMPORT_DESCRIPTOR* descriptoies) {
+int dump64(const char* base, const std::size_t off, const std::size_t va, const IMAGE_IMPORT_DESCRIPTOR* descriptors) {
   const std::ptrdiff_t delta = reinterpret_cast<std::size_t>(base) + off - va;
   auto print_thunks = [delta](const IMAGE_IMPORT_DESCRIPTOR& descriptor) {
     for (auto thunks = reinterpret_cast<const IMAGE_THUNK_DATA64*>(descriptor.OriginalFirstThunk + delta); thunks->u1.AddressOfData; ++thunks) {
@@ -56,7 +58,7 @@ int dump64(const char* base, const std::size_t off, const std::size_t va, const 
     }
   };
 
-  for (auto iter = descriptoies; iter->Name; ++iter) {
+  for (auto iter = descriptors; iter->Name; ++iter) {
     std::printf("%s\n", reinterpret_cast<char*>(iter->Name + delta));
     print_thunks(*iter);
   }
@@ -79,30 +81,37 @@ int dump64(const char* base, const std::size_t off, const std::size_t va, const 
   return 0;
 }
 
+//template <typename Section, template <typename T> class AddressPolicy>
+//Section* find(Section* first, Section* last, std::size_t address) {
+//  return std::find_if(first, last, [address](const Section& section) { return AddressPolicy<Section>::in_section(address, section); });
+//}
+
 int dump_pe64(const char* buff) {
   auto& Dos = reinterpret_cast<const IMAGE_DOS_HEADER&>(buff[0]);
   if (Dos.e_magic == IMAGE_DOS_SIGNATURE) {
     auto& Nt = reinterpret_cast<const IMAGE_NT_HEADERS64&>(buff[Dos.e_lfanew]);
     if (Nt.Signature == IMAGE_NT_SIGNATURE && Nt.OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
-      auto Sections = IMAGE_FIRST_SECTION(&Nt);
-      std::size_t va0 = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+      using rva = relative_virtual_address_policy<IMAGE_SECTION_HEADER>;
+      auto first = IMAGE_FIRST_SECTION(&Nt);
+      auto last = first + Nt.FileHeader.NumberOfSections;
+
+      auto va0 = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
       if (va0) {
-        for (std::size_t i = 0; i < Nt.FileHeader.NumberOfSections; ++i) {
-          if ((Sections[i].VirtualAddress <= va0) && (va0 < Sections[i].VirtualAddress + Sections[i].Misc.VirtualSize)) {
-            dump64(buff, Sections[i].PointerToRawData, Sections[i].VirtualAddress, reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&buff[Sections[i].PointerToRawData + va0 - Sections[i].VirtualAddress]));
-            break;
-          }
+        auto pred = [va0](const IMAGE_SECTION_HEADER& section) { return rva::in_section(va0, section); };
+        auto iter = std::find_if(first, last, pred);
+        if (iter != last) {
+          auto directories = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(&buff[rva::cast(va0, *iter)]);
+          dump64(buff, iter->PointerToRawData, iter->VirtualAddress, directories);
         }
       }
 
-      std::size_t va1 = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+      auto va1 = Nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
       if (va1) {
-        for (std::size_t i = 0; i < Nt.FileHeader.NumberOfSections; ++i) {
-          if ((Sections[i].VirtualAddress <= va1) && (va1 < Sections[i].VirtualAddress + Sections[i].Misc.VirtualSize)) {
-            const std::ptrdiff_t delta = reinterpret_cast<std::size_t>(buff) + Sections[i].PointerToRawData - Sections[i].VirtualAddress;
-            dump64(buff, Sections[i].PointerToRawData, Sections[i].VirtualAddress, reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&buff[Sections[i].PointerToRawData + va1 - Sections[i].VirtualAddress]));
-            break;
-          }
+        auto pred = [va1](const IMAGE_SECTION_HEADER& section) { return rva::in_section(va1, section); };
+        auto iter = std::find_if(first, last, pred);
+        if (iter != last) {
+          auto descriptoies = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(&buff[rva::cast(va1, *iter)]);
+          dump64(buff, iter->PointerToRawData, iter->VirtualAddress, descriptoies);
         }
       }
     }
